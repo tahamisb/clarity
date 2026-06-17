@@ -1,0 +1,5 @@
+# Model artifacts (cancellation_model.joblib, feature_pipeline.joblib) and
+# exploration/metrics JSONs are generated here by:
+#   python scripts/explore_cancellations.py
+#   python scripts/train_cancellation_model.py
+# This directory is kept in git so the path exists before training runs.

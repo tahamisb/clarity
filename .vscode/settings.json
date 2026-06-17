@@ -1,0 +1,15 @@
+{
+    "claudeProfileSwitcher.profiles": [
+
+
+
+        {
+            "name": "Work",
+            "configDir": "~/.claude"
+        },
+        {
+            "name": "Personal",
+            "configDir": "~/.claude-personal"
+        }
+    ]
+}

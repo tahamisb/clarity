@@ -1,0 +1,31 @@
+{
+  "executive_summary": "Based on the provided dataset spanning January 2019 to June 2026, Rafeeq shows an absolute cancellation rate of 0.0% across all recorded orders. While this suggests flawless operational execution on paper, it highly indicates a critical data logging or pipeline issue where cancellations are not being captured. The single biggest lever is to immediately audit the order status pipeline to ensure cancelled orders are not being misclassified as completed or omitted entirely.",
+  "top_drivers": [
+    {
+      "name": "Data Pipeline Logging Integrity",
+      "importance": 1.0,
+      "explanation": "The dataset shows zero cancellations across millions of orders over several years, pointing to a systemic tracking or ingestion error rather than actual operational perfection.",
+      "recommendation": "Coordinate with the engineering team to audit the database schema and ETL pipeline for order status flags."
+    },
+    {
+      "name": "Latent High-Volume Operational Stress",
+      "importance": 0.3,
+      "explanation": "With order volumes peaking in Zone 18 Muaither and during Late Night hours, any future operational failure would disproportionately impact these segments.",
+      "recommendation": "Establish proactive monitoring for high-volume zones to catch real-time spikes if logging is restored."
+    }
+  ],
+  "high_risk_segments": [
+    {
+      "segment": "Late Night orders in Zone 18 Muaither",
+      "cancel_rate": 0.0,
+      "recommendation": "Audit order status transitions specifically for late-night transactions in high-volume zones to verify logging accuracy."
+    },
+    {
+      "segment": "High-volume merchants like McDonald's",
+      "cancel_rate": 0.0,
+      "recommendation": "Cross-reference Rafeeq's internal order logs with merchant-side POS portal data to check for discrepancies in cancelled orders."
+    }
+  ],
+  "trend_insight": "Order volume has scaled exponentially from 56 orders in January 2019 to over 815,000 orders in June 2025, yet recorded cancellations remain at zero. This flatline trend confirms that the lack of cancellations is a systemic data reporting anomaly rather than an operational reality.",
+  "generated_at": "2026-06-17T09:59:50.985298+00:00"
+}

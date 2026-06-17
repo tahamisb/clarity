@@ -1,0 +1,32 @@
+[
+  {
+    "time_bucket": "Dinner",
+    "total_orders": 10470616,
+    "cancelled": 0,
+    "cancel_rate_pct": 0.0
+  },
+  {
+    "time_bucket": "Late Night",
+    "total_orders": 11586896,
+    "cancelled": 0,
+    "cancel_rate_pct": 0.0
+  },
+  {
+    "time_bucket": "Morning",
+    "total_orders": 3457980,
+    "cancelled": 0,
+    "cancel_rate_pct": 0.0
+  },
+  {
+    "time_bucket": "Afternoon",
+    "total_orders": 5909342,
+    "cancelled": 0,
+    "cancel_rate_pct": 0.0
+  },
+  {
+    "time_bucket": "Lunch",
+    "total_orders": 4619957,
+    "cancelled": 0,
+    "cancel_rate_pct": 0.0
+  }
+]

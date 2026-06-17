@@ -1,0 +1,297 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-heading: var(--font-display), 'Archivo Fallback';
+  --font-display: var(--font-display), 'Archivo Fallback';
+  --font-sans: var(--font-geist-sans), 'Geist Fallback';
+  --font-mono: var(--font-geist-mono), 'Geist Mono Fallback';
+  --color-positive: var(--positive);
+  --color-neutral: var(--neutral);
+  --color-negative: var(--negative);
+  --color-brand: var(--brand);
+  --color-brand-bright: var(--brand-bright);
+  --color-brand-deep: var(--brand-deep);
+  --color-brand-cyan: var(--brand-cyan);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/* ----------------------------------------------------------------------------
+   LIGHT THEME — warm paper, brand-tinted, frosted glass
+---------------------------------------------------------------------------- */
+:root {
+  color-scheme: light;
+  --background: #faf8fc;
+  --foreground: #1a1226;
+  --card: rgba(255, 255, 255, 0.72);
+  --card-foreground: #1a1226;
+  --popover: #ffffff;
+  --popover-foreground: #1a1226;
+  --primary: #7c1cda;
+  --primary-foreground: #ffffff;
+  --secondary: #f0ebf7;
+  --secondary-foreground: #2e1c44;
+  --muted: #f2eef8;
+  --muted-foreground: #5a5166;
+  --accent: #7c1cda;
+  --accent-foreground: #ffffff;
+  --destructive: #e23d5c;
+  --border: rgba(20, 6, 40, 0.1);
+  --input: rgba(20, 6, 40, 0.12);
+  --ring: #7c1cda;
+
+  /* Brand (design system) */
+  --brand: #7c1cda;
+  --brand-bright: #9e47e8;
+  --brand-deep: #280949;
+  --brand-cyan: #00ffec;
+
+  /* Semantic (design system) */
+  --positive: #1cb57a;
+  --neutral: #f5a623;
+  --negative: #e23d5c;
+
+  /* Charts */
+  --chart-1: #7c1cda;
+  --chart-2: #1cb57a;
+  --chart-3: #f5a623;
+  --chart-4: #e23d5c;
+  --chart-5: #3d7be2;
+
+  --radius: 0.75rem;
+
+  /* Sidebar */
+  --sidebar: rgba(255, 255, 255, 0.6);
+  --sidebar-foreground: #1a1226;
+  --sidebar-primary: #7c1cda;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: rgba(124, 28, 218, 0.08);
+  --sidebar-accent-foreground: #2e1c44;
+  --sidebar-border: rgba(20, 6, 40, 0.08);
+  --sidebar-ring: #7c1cda;
+
+  /* Liquid glass */
+  --glass-bg: rgba(255, 255, 255, 0.68);
+  --glass-border: rgba(20, 6, 40, 0.08);
+  --glass-highlight: rgba(255, 255, 255, 0.85);
+  --glass-shadow: 0 8px 28px rgba(40, 9, 73, 0.1);
+  --grid-dot: rgba(124, 28, 218, 0.07);
+
+  /* Ambient body glow tints */
+  --glow-1: rgba(124, 28, 218, 0.08);
+  --glow-2: rgba(0, 255, 236, 0.05);
+}
+
+/* ----------------------------------------------------------------------------
+   DARK THEME — deep purple, near-black, glowing glass
+---------------------------------------------------------------------------- */
+.dark {
+  color-scheme: dark;
+  --background: #0d0619;
+  --foreground: #f4eefb;
+  --card: rgba(36, 20, 64, 0.55);
+  --card-foreground: #f4eefb;
+  --popover: #1b0f30;
+  --popover-foreground: #f4eefb;
+  --primary: #7c1cda;
+  --primary-foreground: #ffffff;
+  --secondary: #281544;
+  --secondary-foreground: #e7dcf6;
+  --muted: #221037;
+  --muted-foreground: #a98fcb;
+  --accent: #9e47e8;
+  --accent-foreground: #ffffff;
+  --destructive: #e23d5c;
+  --border: rgba(255, 255, 255, 0.1);
+  --input: rgba(255, 255, 255, 0.12);
+  --ring: #9e47e8;
+
+  /* Brand (design system) */
+  --brand: #7c1cda;
+  --brand-bright: #9e47e8;
+  --brand-deep: #280949;
+  --brand-cyan: #00ffec;
+
+  /* Semantic (design system) */
+  --positive: #1cb57a;
+  --neutral: #f5a623;
+  --negative: #e23d5c;
+
+  /* Charts */
+  --chart-1: #9e47e8;
+  --chart-2: #1cb57a;
+  --chart-3: #f5a623;
+  --chart-4: #e23d5c;
+  --chart-5: #3d7be2;
+
+  /* Sidebar */
+  --sidebar: rgba(22, 9, 42, 0.55);
+  --sidebar-foreground: #f4eefb;
+  --sidebar-primary: #9e47e8;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: rgba(158, 71, 232, 0.14);
+  --sidebar-accent-foreground: #f4eefb;
+  --sidebar-border: rgba(255, 255, 255, 0.08);
+  --sidebar-ring: #9e47e8;
+
+  /* Liquid glass */
+  --glass-bg: rgba(36, 20, 64, 0.5);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-highlight: rgba(255, 255, 255, 0.06);
+  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+  --grid-dot: rgba(158, 71, 232, 0.1);
+
+  /* Ambient body glow tints */
+  --glow-1: rgba(124, 28, 218, 0.22);
+  --glow-2: rgba(0, 255, 236, 0.06);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    /* Ambient brand glows for liquid-glass depth (both themes) */
+    background-image:
+      radial-gradient(60rem 40rem at 12% -8%, var(--glow-1), transparent 60%),
+      radial-gradient(50rem 36rem at 100% 0%, var(--glow-2), transparent 55%);
+    background-attachment: fixed;
+    background-repeat: no-repeat;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+
+@layer components {
+  /* Signature Rafeeq display type: heavy italic, tight tracking */
+  .display-italic {
+    font-family: var(--font-display), 'Archivo Fallback', sans-serif;
+    font-weight: 900;
+    font-style: italic;
+    letter-spacing: -0.02em;
+    line-height: 0.92;
+  }
+  .brand-grid-bg {
+    background-image: radial-gradient(var(--grid-dot) 1px, transparent 1px);
+    background-size: 22px 22px;
+  }
+
+  /* Liquid glass surface — translucent, blurred, layered highlight */
+  .glass {
+    background: var(--glass-bg);
+    backdrop-filter: blur(16px) saturate(140%);
+    -webkit-backdrop-filter: blur(16px) saturate(140%);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow), inset 0 1px 0 var(--glass-highlight);
+  }
+  /* Stronger blur for floating chrome (sidebar, topbar, popovers) */
+  .glass-strong {
+    background: var(--glass-bg);
+    backdrop-filter: blur(24px) saturate(150%);
+    -webkit-backdrop-filter: blur(24px) saturate(150%);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow), inset 0 1px 0 var(--glass-highlight);
+  }
+
+  /* Skeleton shimmer for loading states */
+  .skeleton {
+    position: relative;
+    overflow: hidden;
+    background: var(--muted);
+  }
+  .skeleton::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(
+      90deg,
+      transparent,
+      var(--glass-highlight),
+      transparent
+    );
+    animation: skeleton-shimmer 1.5s ease-in-out infinite;
+  }
+  @keyframes skeleton-shimmer {
+    100% {
+      transform: translateX(100%);
+    }
+  }
+}
+
+/* ----------------------------------------------------------------------------
+   LEAFLET — theme the map chrome to match the dashboard
+---------------------------------------------------------------------------- */
+.leaflet-container {
+  font-family: var(--font-mono), monospace;
+}
+.leaflet-tooltip {
+  background: var(--popover);
+  color: var(--popover-foreground);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  box-shadow: var(--glass-shadow);
+  font-size: 11px;
+  padding: 6px 9px;
+}
+.leaflet-tooltip-top::before {
+  border-top-color: var(--border);
+}
+.leaflet-bar,
+.leaflet-bar a {
+  background: var(--popover);
+  color: var(--popover-foreground);
+  border-color: var(--border);
+}
+.leaflet-bar a:hover {
+  background: var(--secondary);
+}
+.leaflet-control-attribution {
+  background: var(--glass-bg) !important;
+  color: var(--muted-foreground);
+}
+.leaflet-control-attribution a {
+  color: var(--accent);
+}

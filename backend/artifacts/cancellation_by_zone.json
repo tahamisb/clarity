@@ -1,0 +1,306 @@
+{
+  "by_zone_name": [
+    {
+      "zone": "Zone 18 Muaither",
+      "total_orders": 3207023,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone": "Zone 19 Baaya and Al Aziziyah",
+      "total_orders": 2079163,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone": "Zone 7 Umm Salal Muhammed",
+      "total_orders": 1557660,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone": "Zone 10 Al Duhail",
+      "total_orders": 1539398,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone": "Zone 17 Abu Hamour and Ain Khaled",
+      "total_orders": 1504075,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone": "Zone 5 Lusail and Pearl",
+      "total_orders": 1469665,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone": "Zone 8 Gharrrafat Al Rayyan",
+      "total_orders": 1424507,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone": "Zone 6 Al Khisah",
+      "total_orders": 1059832,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone": "Zone 13 Al Sadd",
+      "total_orders": 921541,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone": "Zone 2 Al Khor",
+      "total_orders": 910433,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone": "Zone 21 Al Wakrah",
+      "total_orders": 842198,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone": "Zone 11 West Bay",
+      "total_orders": 649888,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone": "Zone 15 Al Muntazah and Hilal",
+      "total_orders": 633552,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone": "Zone 16 Old Airport",
+      "total_orders": 476276,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone": "Zone 12 Fereej bin Omran",
+      "total_orders": 418245,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone": "Zone 9 Mall of Qatar and Bani Hajer",
+      "total_orders": 328124,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone": "Zone 4 Umm Salal Ali",
+      "total_orders": 289946,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone": "Zone 14 Al Souq and Old Doha",
+      "total_orders": 242719,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone": "Zone 23 Ash-Shahaniyah",
+      "total_orders": 200904,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone": "Zone 22 Al Wukair",
+      "total_orders": 113173,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone": "Zone 3 Umm Qarn",
+      "total_orders": 108375,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone": "Zone 24 Qatar University",
+      "total_orders": 101743,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone": "Zone 20 Al Sailiya and Industrial area",
+      "total_orders": 98769,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone": "Zone 1 Al Ruwais",
+      "total_orders": 86133,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone": "Zone 25 Dukhan",
+      "total_orders": 3079,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    }
+  ],
+  "by_customer_zone": [
+    {
+      "zone": "Zone 18 Muaither",
+      "total_orders": 3024718,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone": "Zone 6 Al Khisah",
+      "total_orders": 1355852,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone": "Zone 17 Abu Hamour and Ain Khaled",
+      "total_orders": 1292855,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone": "Zone 8 Gharrrafat Al Rayyan",
+      "total_orders": 1154644,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone": "Zone 10 Al Duhail",
+      "total_orders": 967615,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone": "Zone 7 Umm Salal Muhammed",
+      "total_orders": 879199,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone": "Zone 4 Umm Salal Ali",
+      "total_orders": 848553,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone": "Zone 21 Al Wakrah",
+      "total_orders": 795147,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone": "Zone 9 Mall of Qatar and Bani Hajer",
+      "total_orders": 788752,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone": "Zone 16 Old Airport",
+      "total_orders": 786238,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone": "Zone 5 Lusail and Pearl",
+      "total_orders": 771710,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone": "Zone 19 Baaya and Al Aziziyah",
+      "total_orders": 738303,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone": "Zone 20 Al Sailiya and Industrial area",
+      "total_orders": 723519,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone": "Zone 2 Al Khor",
+      "total_orders": 683524,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone": "Zone 22 Al Wukair",
+      "total_orders": 618864,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone": "Zone 3 Umm Qarn",
+      "total_orders": 586808,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone": "Zone 11 West Bay",
+      "total_orders": 550582,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone": "Zone 15 Al Muntazah and Hilal",
+      "total_orders": 487447,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone": "Zone 12 Fereej bin Omran",
+      "total_orders": 456910,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone": "Zone 23 Ash-Shahaniyah",
+      "total_orders": 337917,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone": "Zone 13 Al Sadd",
+      "total_orders": 246360,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone": "Zone 14 Al Souq and Old Doha",
+      "total_orders": 134131,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone": "Zone 1 Al Ruwais",
+      "total_orders": 134002,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone": "Zone 24 Qatar University",
+      "total_orders": 101872,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone": "Zone 25 Dukhan",
+      "total_orders": 6662,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    }
+  ]
+}

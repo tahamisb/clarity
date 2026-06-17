@@ -1,0 +1,51 @@
+[
+  {
+    "day_of_week": "Sunday",
+    "dow_index": 1,
+    "total_orders": 4960118,
+    "cancelled": 0,
+    "cancel_rate_pct": 0.0
+  },
+  {
+    "day_of_week": "Monday",
+    "dow_index": 2,
+    "total_orders": 4978657,
+    "cancelled": 0,
+    "cancel_rate_pct": 0.0
+  },
+  {
+    "day_of_week": "Tuesday",
+    "dow_index": 3,
+    "total_orders": 5094495,
+    "cancelled": 0,
+    "cancel_rate_pct": 0.0
+  },
+  {
+    "day_of_week": "Wednesday",
+    "dow_index": 4,
+    "total_orders": 5035246,
+    "cancelled": 0,
+    "cancel_rate_pct": 0.0
+  },
+  {
+    "day_of_week": "Thursday",
+    "dow_index": 5,
+    "total_orders": 5250734,
+    "cancelled": 0,
+    "cancel_rate_pct": 0.0
+  },
+  {
+    "day_of_week": "Friday",
+    "dow_index": 6,
+    "total_orders": 5434824,
+    "cancelled": 0,
+    "cancel_rate_pct": 0.0
+  },
+  {
+    "day_of_week": "Saturday",
+    "dow_index": 7,
+    "total_orders": 5290717,
+    "cancelled": 0,
+    "cancel_rate_pct": 0.0
+  }
+]

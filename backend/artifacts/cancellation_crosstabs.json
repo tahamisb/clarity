@@ -1,0 +1,286 @@
+{
+  "zone_x_time": [
+    {
+      "zone_name": "Zone 16 Old Airport",
+      "time_bucket": "Morning",
+      "total_orders": 44396,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone_name": "Zone 20 Al Sailiya and Industrial area",
+      "time_bucket": "Dinner",
+      "total_orders": 26884,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone_name": "Zone 17 Abu Hamour and Ain Khaled",
+      "time_bucket": "Late Night",
+      "total_orders": 502618,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone_name": "Zone 5 Lusail and Pearl",
+      "time_bucket": "Morning",
+      "total_orders": 157752,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone_name": "Zone 19 Baaya and Al Aziziyah",
+      "time_bucket": "Afternoon",
+      "total_orders": 341659,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone_name": "Zone 5 Lusail and Pearl",
+      "time_bucket": "Late Night",
+      "total_orders": 398923,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone_name": "Zone 8 Gharrrafat Al Rayyan",
+      "time_bucket": "Lunch",
+      "total_orders": 211200,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone_name": "Zone 14 Al Souq and Old Doha",
+      "time_bucket": "Afternoon",
+      "total_orders": 46151,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone_name": "Zone 14 Al Souq and Old Doha",
+      "time_bucket": "Lunch",
+      "total_orders": 41453,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone_name": "Zone 12 Fereej bin Omran",
+      "time_bucket": "Afternoon",
+      "total_orders": 74881,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone_name": "Zone 20 Al Sailiya and Industrial area",
+      "time_bucket": "Late Night",
+      "total_orders": 36350,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone_name": "Zone 13 Al Sadd",
+      "time_bucket": "Afternoon",
+      "total_orders": 150479,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone_name": "Zone 4 Umm Salal Ali",
+      "time_bucket": "Afternoon",
+      "total_orders": 43830,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone_name": "Zone 9 Mall of Qatar and Bani Hajer",
+      "time_bucket": "Afternoon",
+      "total_orders": 57528,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone_name": "Zone 8 Gharrrafat Al Rayyan",
+      "time_bucket": "Late Night",
+      "total_orders": 407496,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone_name": "Zone 21 Al Wakrah",
+      "time_bucket": "Afternoon",
+      "total_orders": 129826,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone_name": "Zone 15 Al Muntazah and Hilal",
+      "time_bucket": "Morning",
+      "total_orders": 60276,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone_name": "Zone 10 Al Duhail",
+      "time_bucket": "Afternoon",
+      "total_orders": 260018,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone_name": "Zone 2 Al Khor",
+      "time_bucket": "Dinner",
+      "total_orders": 284977,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "zone_name": "Zone 15 Al Muntazah and Hilal",
+      "time_bucket": "Late Night",
+      "total_orders": 192223,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    }
+  ],
+  "merchant_x_dow": [
+    {
+      "restaurant_name": "TIKKA BY EAT974",
+      "day_of_week": "Monday",
+      "total_orders": 1379,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "restaurant_name": "SMOOTHIE PANDA",
+      "day_of_week": "Tuesday",
+      "total_orders": 466,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "restaurant_name": "ROOST",
+      "day_of_week": "Monday",
+      "total_orders": 4839,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "restaurant_name": "MUTABBAQ & KUNAFA",
+      "day_of_week": "Monday",
+      "total_orders": 2976,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "restaurant_name": "SHAKE  SHACK",
+      "day_of_week": "Tuesday",
+      "total_orders": 1123,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "restaurant_name": "THEJAJA RESTAURANT",
+      "day_of_week": "Monday",
+      "total_orders": 3833,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "restaurant_name": "NANDOS",
+      "day_of_week": "Tuesday",
+      "total_orders": 8951,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "restaurant_name": "PF CHANGS",
+      "day_of_week": "Tuesday",
+      "total_orders": 2467,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "restaurant_name": "CAJUN",
+      "day_of_week": "Monday",
+      "total_orders": 17053,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "restaurant_name": "ABN EAMI RESTAURANT",
+      "day_of_week": "Tuesday",
+      "total_orders": 744,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "restaurant_name": "WOODEN BAKERY",
+      "day_of_week": "Monday",
+      "total_orders": 6191,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "restaurant_name": "RAFEEQ KIDZONE",
+      "day_of_week": "Saturday",
+      "total_orders": 1113,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "restaurant_name": "SOGHAAT SWEET AND BAKERS",
+      "day_of_week": "Saturday",
+      "total_orders": 1018,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "restaurant_name": "MANGO TALAAT",
+      "day_of_week": "Monday",
+      "total_orders": 7077,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "restaurant_name": "GO CRISPY",
+      "day_of_week": "Tuesday",
+      "total_orders": 58094,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "restaurant_name": "MUTABBAQ & SAJ",
+      "day_of_week": "Saturday",
+      "total_orders": 11352,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "restaurant_name": "FORSAN ALZUBARAH KITCHEN",
+      "day_of_week": "Saturday",
+      "total_orders": 418,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "restaurant_name": "SABAH W MASA",
+      "day_of_week": "Tuesday",
+      "total_orders": 5089,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "restaurant_name": "RAYAHEEN AL SHAM",
+      "day_of_week": "Tuesday",
+      "total_orders": 1074,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    },
+    {
+      "restaurant_name": "AL MAJLES AL ARABI",
+      "day_of_week": "Monday",
+      "total_orders": 856,
+      "cancelled": 0,
+      "cancel_rate_pct": 0.0
+    }
+  ]
+}
