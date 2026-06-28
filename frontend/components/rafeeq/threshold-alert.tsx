@@ -3,6 +3,7 @@
 import { AlertTriangle, Hash, Mail, X } from "lucide-react"
 import { useState } from "react"
 import { useSettings } from "@/lib/settings-context"
+import { useT } from "@/lib/i18n"
 
 /**
  * Banner shown when a configured alert threshold (cancellation rate / sentiment
@@ -18,13 +19,14 @@ export function ThresholdAlert({
   items: string[]
 }) {
   const { settings } = useSettings()
+  const t = useT()
   const [dismissed, setDismissed] = useState(false)
 
   if (dismissed || items.length === 0) return null
 
   const channels: { icon: typeof Hash; label: string }[] = []
-  if (settings.slackAlerts) channels.push({ icon: Hash, label: "Slack" })
-  if (settings.emailAlerts) channels.push({ icon: Mail, label: "Email" })
+  if (settings.slackAlerts) channels.push({ icon: Hash, label: t("set.slack") })
+  if (settings.emailAlerts) channels.push({ icon: Mail, label: t("set.email") })
 
   return (
     <div className="flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4">
@@ -44,7 +46,7 @@ export function ThresholdAlert({
         <div className="mt-2 flex items-center gap-2 text-[11px] text-muted-foreground">
           {channels.length > 0 ? (
             <>
-              <span>Would notify via</span>
+              <span>{t("ta.wouldNotifyVia")}</span>
               {channels.map((c) => (
                 <span
                   key={c.label}
@@ -56,14 +58,14 @@ export function ThresholdAlert({
               ))}
             </>
           ) : (
-            <span>No alert channels enabled — turn one on in Settings.</span>
+            <span>{t("ta.noChannels")}</span>
           )}
         </div>
       </div>
       <button
         onClick={() => setDismissed(true)}
         className="shrink-0 text-muted-foreground transition-colors hover:text-foreground"
-        aria-label="Dismiss alert"
+        aria-label={t("a11y.dismissAlert")}
       >
         <X className="size-4" />
       </button>

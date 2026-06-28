@@ -7,11 +7,38 @@ import asyncio
 import json
 import logging
 import re
+import time
 
 from app.config import get_settings
 from app.services.bq_client import get_client
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# TTL cache — these aggregates scan the full call_analysis table and the
+# dashboard refetches them on every mount + auto-refresh tick. 5-min cache
+# collapses repeat loads to one BQ query.
+# ponytail: copy of the cancellation_service cache; extract to a shared util
+# if a third service needs it.
+# ---------------------------------------------------------------------------
+
+_CACHE: dict[str, tuple[float, object]] = {}
+_CACHE_TTL_S = 300
+
+
+async def _cached(key: str, make_coro):
+    now = time.time()
+    hit = _CACHE.get(key)
+    if hit and now - hit[0] < _CACHE_TTL_S:
+        return hit[1]
+    value = await make_coro()
+    _CACHE[key] = (now, value)
+    return value
+
+
+def clear_cache() -> None:
+    _CACHE.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -199,8 +226,10 @@ def _summary_sync() -> dict:
 
 
 async def get_analytics_summary() -> dict:
-    loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, _summary_sync)
+    async def make():
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, _summary_sync)
+    return await _cached("summary", make)
 
 
 def _area_insights_sync() -> dict:
@@ -241,8 +270,10 @@ def _area_insights_sync() -> dict:
 
 
 async def get_area_insights() -> dict:
-    loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, _area_insights_sync)
+    async def make():
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, _area_insights_sync)
+    return await _cached("area", make)
 
 
 def _restaurant_insights_sync() -> dict:
@@ -284,8 +315,10 @@ def _restaurant_insights_sync() -> dict:
 
 
 async def get_restaurant_insights() -> dict:
-    loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, _restaurant_insights_sync)
+    async def make():
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, _restaurant_insights_sync)
+    return await _cached("restaurant", make)
 
 
 # ---------------------------------------------------------------------------
@@ -329,5 +362,7 @@ def _get_calls_sync(page: int, page_size: int) -> dict:
 
 
 async def get_calls(page: int = 1, page_size: int = 200) -> dict:
-    loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, _get_calls_sync, page, page_size)
+    async def make():
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, _get_calls_sync, page, page_size)
+    return await _cached(f"calls:{page}:{page_size}", make)

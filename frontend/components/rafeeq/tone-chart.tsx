@@ -3,11 +3,14 @@
 import { useEffect, useState } from "react"
 import { Cell, Pie, PieChart, ResponsiveContainer } from "recharts"
 import { SENTIMENT_COLORS, type CallRecord, type Sentiment } from "@/lib/rafeeq-data"
+import { useT, useTV } from "@/lib/i18n"
 import { Panel } from "./panel"
 
 const ORDER: Sentiment[] = ["Positive", "Neutral", "Negative"]
 
 export function ToneChart({ calls }: { calls: CallRecord[] }) {
+  const t = useT()
+  const tv = useTV()
   const [mounted, setMounted] = useState(false)
   useEffect(() => setMounted(true), [])
 
@@ -17,10 +20,10 @@ export function ToneChart({ calls }: { calls: CallRecord[] }) {
   const data = ORDER.map((name) => ({ name, value: counts[name] })).filter((d) => d.value > 0)
 
   return (
-    <Panel title="Sentiment Distribution">
+    <Panel title={t("chart.sentimentDistribution")}>
       {total === 0 ? (
         <div className="flex h-36 items-center justify-center text-xs text-muted-foreground">
-          Upload transcripts to see sentiment breakdown
+          {t("chart.uploadForSentiment")}
         </div>
       ) : (
         <div className="flex items-center gap-4">
@@ -46,7 +49,7 @@ export function ToneChart({ calls }: { calls: CallRecord[] }) {
             )}
             <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
               <span className="text-lg font-bold text-foreground">{total}</span>
-              <span className="text-[10px] text-muted-foreground">calls</span>
+              <span className="text-[10px] text-muted-foreground">{t("unit.calls")}</span>
             </div>
           </div>
 
@@ -57,7 +60,7 @@ export function ToneChart({ calls }: { calls: CallRecord[] }) {
                   className="size-2.5 rounded-full"
                   style={{ background: SENTIMENT_COLORS[name] }}
                 />
-                <span className="flex-1 text-foreground">{name}</span>
+                <span className="flex-1 text-foreground">{tv(name)}</span>
                 <span className="tabular-nums font-semibold text-foreground">
                   {((counts[name] / total) * 100).toFixed(0)}%
                 </span>

@@ -16,20 +16,23 @@ import {
   Bot,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useT } from "@/lib/i18n"
 import { useState, useEffect } from "react"
 import { usePathname, useRouter } from "next/navigation"
 
+// `labelKey` values resolve through the i18n dictionary at render time so the
+// sidebar follows the active language (see lib/i18n.tsx).
 const PAGES = [
   {
     id: "cx-dashboard",
-    label: "CX Dashboard",
+    labelKey: "nav.cxDashboard",
     href: "/cx-dashboard",
     icon: LayoutDashboard,
     parts: []
   },
   {
     id: "chatbot",
-    label: "Chatbot",
+    labelKey: "nav.chatbot",
     href: "/chatbot",
     icon: Bot,
     parts: [],
@@ -37,28 +40,28 @@ const PAGES = [
   },
   {
     id: "call-intelligence",
-    label: "Call Intelligence",
+    labelKey: "nav.callIntelligence",
     href: "/",
     icon: PhoneCall,
     parts: [
-      { label: "Overview", id: "dashboard", icon: LayoutDashboard },
-      { label: "Call Logs", id: "calls", icon: PhoneCall },
-      { label: "Pipeline", id: "pipeline", icon: Workflow },
-      { label: "Intents", id: "intents", icon: Tags },
-      { label: "Coverage", id: "coverage", icon: Map },
-      { label: "Reports", id: "reports", icon: FileBarChart },
+      { labelKey: "nav.overview", id: "dashboard", icon: LayoutDashboard },
+      { labelKey: "nav.callLogs", id: "calls", icon: PhoneCall },
+      { labelKey: "nav.pipeline", id: "pipeline", icon: Workflow },
+      { labelKey: "nav.intents", id: "intents", icon: Tags },
+      { labelKey: "nav.coverage", id: "coverage", icon: Map },
+      { labelKey: "nav.reports", id: "reports", icon: FileBarChart },
     ]
   },
   {
     id: "messages",
-    label: "Support Messages",
+    labelKey: "nav.supportMessages",
     href: "/messages",
     icon: MessageSquare,
     parts: []
   },
   {
     id: "cancellations",
-    label: "Cancellations",
+    labelKey: "nav.cancellations",
     href: "/cancellations",
     icon: Ban,
     parts: []
@@ -66,6 +69,7 @@ const PAGES = [
 ]
 
 export function Sidebar() {
+  const t = useT()
   const pathname = usePathname()
   const router = useRouter()
   const [activeTab, setActiveTab] = useState("dashboard")
@@ -137,7 +141,7 @@ export function Sidebar() {
 
       <nav className="flex-1 px-3 py-5">
         <p className="px-3 pb-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-          Modules
+          {t("nav.modules")}
         </p>
         <div className="flex flex-col gap-3">
           {PAGES.map((page) => {
@@ -151,14 +155,14 @@ export function Sidebar() {
                   <div
                     className="flex cursor-not-allowed items-center justify-between rounded-lg px-2 py-1.5 text-muted-foreground/50"
                     aria-disabled="true"
-                    title="Chatbot is temporarily unavailable"
+                    title={t("nav.chatbotUnavailable")}
                   >
                     <span className="flex flex-1 items-center gap-2.5 px-1 py-0.5 text-sm font-semibold">
                       <page.icon className="size-4" />
-                      {page.label}
+                      {t(page.labelKey)}
                     </span>
                     <span className="rounded-full bg-secondary px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
-                      Soon
+                      {t("nav.soon")}
                     </span>
                   </div>
                 </div>
@@ -177,7 +181,7 @@ export function Sidebar() {
                     onClick={() => handlePageClick(page.id, page.href)}
                   >
                     <page.icon className="size-4" />
-                    {page.label}
+                    {t(page.labelKey)}
                   </button>
 
                   {page.parts.length > 0 && (
@@ -209,7 +213,7 @@ export function Sidebar() {
                             )}
                           >
                             <part.icon className={cn("size-3.5", isPartActive ? "text-primary" : "text-muted-foreground/70")} />
-                            {part.label}
+                            {t(part.labelKey)}
                           </button>
                         </li>
                       )
@@ -225,12 +229,12 @@ export function Sidebar() {
       <div className="border-t border-sidebar-border px-3 py-4">
         <ul className="flex flex-col gap-1">
           {[
-            { label: "Settings", icon: Settings, href: "/settings" },
-            { label: "Help", icon: HelpCircle, href: "/help" },
+            { labelKey: "nav.settings", icon: Settings, href: "/settings" },
+            { labelKey: "nav.help", icon: HelpCircle, href: "/help" },
           ].map((item) => {
             const isActive = mounted && pathname === item.href
             return (
-              <li key={item.label}>
+              <li key={item.href}>
                 <button
                   onClick={() => {
                     if (pathname !== item.href) router.push(item.href)
@@ -244,7 +248,7 @@ export function Sidebar() {
                   )}
                 >
                   <item.icon className="size-4" />
-                  {item.label}
+                  {t(item.labelKey)}
                 </button>
               </li>
             )

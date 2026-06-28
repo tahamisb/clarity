@@ -1,4 +1,5 @@
 import logging
+from datetime import date
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
@@ -13,10 +14,24 @@ router = APIRouter(prefix="/api/v1/analytics", tags=["text-analytics"])
 logger = logging.getLogger(__name__)
 
 
+def _window(start: Optional[str], end: Optional[str]) -> tuple[Optional[str], Optional[str]]:
+    """Validate optional [start, end] date bounds (YYYY-MM-DD)."""
+    for label, value in (("start", start), ("end", end)):
+        if value is None:
+            continue
+        try:
+            date.fromisoformat(value)
+        except ValueError:
+            raise HTTPException(status_code=422, detail=f"{label} must be a YYYY-MM-DD date")
+    return start, end
+
+
 @router.get("/sentiment-trend", response_model=SentimentTrendResponse)
-async def sentiment_trend():
+async def sentiment_trend(start: Optional[str] = Query(None), end: Optional[str] = Query(None)):
     try:
-        return await svc.get_sentiment_trend()
+        return await svc.get_sentiment_trend(*_window(start, end))
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
@@ -26,42 +41,55 @@ async def top_negative_triggers(
     merchant: Optional[str] = Query(None),
     zone: Optional[str] = Query(None),
     time_of_day: Optional[str] = Query(None, description="morning | afternoon | evening | night"),
+    start: Optional[str] = Query(None),
+    end: Optional[str] = Query(None),
 ):
     if time_of_day not in {"morning", "afternoon", "evening", "night", None}:
         raise HTTPException(status_code=422, detail="time_of_day must be: morning, afternoon, evening, or night")
+    s, e = _window(start, end)
     try:
-        return await svc.get_top_negative_triggers(merchant=merchant, zone=zone, time_of_day=time_of_day)
+        return await svc.get_top_negative_triggers(merchant=merchant, zone=zone, time_of_day=time_of_day, start=s, end=e)
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
 
 @router.get("/cross-channel", response_model=CrossChannelResponse)
-async def cross_channel():
+async def cross_channel(start: Optional[str] = Query(None), end: Optional[str] = Query(None)):
     try:
-        return await svc.get_cross_channel()
+        return await svc.get_cross_channel(*_window(start, end))
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
 
 @router.get("/intent-distribution", response_model=IntentDistributionResponse)
-async def intent_distribution():
+async def intent_distribution(start: Optional[str] = Query(None), end: Optional[str] = Query(None)):
     try:
-        return await svc.get_intent_distribution()
+        return await svc.get_intent_distribution(*_window(start, end))
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
 
 @router.get("/merchant-sentiment", response_model=MerchantSentimentResponse)
-async def merchant_sentiment():
+async def merchant_sentiment(start: Optional[str] = Query(None), end: Optional[str] = Query(None)):
     try:
-        return await svc.get_merchant_sentiment()
+        return await svc.get_merchant_sentiment(*_window(start, end))
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
 
 @router.get("/zone-heatmap", response_model=ZoneHeatmapResponse)
-async def zone_heatmap():
+async def zone_heatmap(start: Optional[str] = Query(None), end: Optional[str] = Query(None)):
     try:
-        return await svc.get_zone_heatmap()
+        return await svc.get_zone_heatmap(*_window(start, end))
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))

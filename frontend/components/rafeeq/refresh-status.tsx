@@ -2,25 +2,26 @@
 
 import { RefreshCw } from "lucide-react"
 import { useEffect, useState } from "react"
-import { REFRESH_OPTIONS, useSettings } from "@/lib/settings-context"
+import { useSettings } from "@/lib/settings-context"
+import { useT } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 
-function intervalLabel(sec: number): string {
-  const match = REFRESH_OPTIONS.find((o) => o.value === sec)
-  if (match && sec > 0) return `every ${match.label}`
-  if (sec > 0) return `every ${sec}s`
-  return "off"
+type T = ReturnType<typeof useT>
+
+function intervalLabel(sec: number, t: T): string {
+  if (sec > 0) return t("refresh.every", { label: t(`refresh.${sec}`) })
+  return t("refresh.offWord")
 }
 
-function timeAgo(from: Date | null, now: number): string {
+function timeAgo(from: Date | null, now: number, t: T): string {
   if (!from) return "—"
   const secs = Math.max(0, Math.round((now - from.getTime()) / 1000))
-  if (secs < 5) return "just now"
-  if (secs < 60) return `${secs}s ago`
+  if (secs < 5) return t("refresh.justNow")
+  if (secs < 60) return t("refresh.secAgo", { n: secs })
   const mins = Math.floor(secs / 60)
-  if (mins < 60) return `${mins}m ago`
+  if (mins < 60) return t("refresh.minAgo", { n: mins })
   const hrs = Math.floor(mins / 60)
-  return `${hrs}h ago`
+  return t("refresh.hrAgo", { n: hrs })
 }
 
 /**
@@ -38,6 +39,7 @@ export function RefreshStatus({
   onRefresh: () => void
 }) {
   const { settings } = useSettings()
+  const t = useT()
   const [now, setNow] = useState(() => Date.now())
 
   // Tick once a second so the "x ago" label stays fresh.
@@ -57,18 +59,18 @@ export function RefreshStatus({
             auto ? "bg-positive animate-pulse" : "bg-muted-foreground/50",
           )}
         />
-        Auto-refresh {intervalLabel(settings.refreshIntervalSec)}
+        {t("refresh.autoRefresh")} {intervalLabel(settings.refreshIntervalSec, t)}
       </span>
       <span className="hidden md:inline">·</span>
-      <span>Updated {timeAgo(lastUpdated, now)}</span>
+      <span>{t("refresh.updated", { ago: timeAgo(lastUpdated, now, t) })}</span>
       <button
         onClick={onRefresh}
         disabled={refreshing}
         className="inline-flex items-center gap-1.5 rounded-full border border-border bg-secondary/50 px-3 py-1 font-semibold text-foreground transition-colors hover:bg-secondary disabled:opacity-60"
-        aria-label="Refresh now"
+        aria-label={t("a11y.refreshNow")}
       >
         <RefreshCw className={cn("size-3.5", refreshing && "animate-spin")} />
-        {refreshing ? "Refreshing…" : "Refresh"}
+        {refreshing ? t("refresh.refreshing") : t("refresh.refresh")}
       </button>
     </div>
   )

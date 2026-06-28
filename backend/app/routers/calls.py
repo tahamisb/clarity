@@ -14,6 +14,7 @@ from fastapi import APIRouter, HTTPException
 from app.models.schemas import AnalyseRequest, BatchAnalyseRequest, PredictRequest
 from app.services.call_service import analyse_transcript
 from app.services.bq_calls import enrich_orders, save_call_analysis
+from app.services.call_analytics_service import clear_cache
 
 router = APIRouter(tags=["calls"])
 logger = logging.getLogger(__name__)
@@ -40,6 +41,7 @@ async def _process(transcript: str) -> dict:
         "analysed_at": datetime.now(timezone.utc).isoformat(),
     }
     asyncio.create_task(save_call_analysis(result))
+    clear_cache()  # new rows written → drop stale aggregates/call-list pages
     return result
 
 

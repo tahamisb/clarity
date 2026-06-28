@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Rafeeq Analytics — Frontend Architecture</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm; }
+  * { box-sizing: border-box; }
+  body { font-family: "Segoe UI", Helvetica, Arial, sans-serif; color: #1a1a2e; font-size: 10.5pt; line-height: 1.5; margin: 0; }
+  h1 { font-size: 24pt; color: #1d4ed8; margin: 0 0 4pt; }
+  h2 { font-size: 15pt; color: #1d4ed8; border-bottom: 2px solid #d6e0fb; padding-bottom: 4pt; margin-top: 26pt; page-break-after: avoid; }
+  h3 { font-size: 12pt; color: #2563eb; margin-top: 16pt; page-break-after: avoid; }
+  h4 { font-size: 10.5pt; color: #444; margin: 12pt 0 4pt; page-break-after: avoid; }
+  p, li { font-size: 10.5pt; }
+  code { font-family: "Consolas", "Courier New", monospace; background: #eef3fe; padding: 1px 4px; border-radius: 3px; font-size: 9pt; color: #1e40af; }
+  pre { background: #14213d; color: #e4ecff; padding: 10px 12px; border-radius: 6px; font-family: "Consolas", monospace; font-size: 8.3pt; line-height: 1.4; white-space: pre; page-break-inside: avoid; }
+  table { border-collapse: collapse; width: 100%; margin: 8pt 0; font-size: 8.8pt; page-break-inside: avoid; }
+  th { background: #1d4ed8; color: #fff; text-align: left; padding: 5px 7px; font-weight: 600; }
+  td { border: 1px solid #ddd; padding: 4px 7px; vertical-align: top; }
+  tr:nth-child(even) td { background: #f6f9ff; }
+  .cover { text-align: center; padding-top: 70mm; page-break-after: always; }
+  .cover h1 { font-size: 32pt; }
+  .cover .sub { font-size: 13pt; color: #2563eb; margin-top: 8pt; }
+  .cover .meta { margin-top: 40mm; font-size: 10pt; color: #666; }
+  .callout { background: #eef3fe; border: 1px solid #c7d7fb; padding: 8px 12px; margin: 10pt 0; border-radius: 4px; }
+  .warn { background: #fdf6ec; border-color: #e7d3ac; }
+  .toc a { color: #1d4ed8; text-decoration: none; }
+  .toc li { margin: 3pt 0; }
+  .flow { background: #f6f9ff; border: 1px solid #d6e0fb; border-radius: 6px; padding: 4px 12px; margin: 8pt 0; page-break-inside: avoid; }
+  ul { margin: 6pt 0; padding-left: 18pt; }
+  .small { font-size: 9pt; color: #666; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <h1>Rafeeq Analytics</h1>
+  <div class="sub">Frontend Architecture &amp; Data-Flow Reference</div>
+  <div class="meta">
+    Next.js 16 (App Router) · React 19 · TypeScript · Tailwind v4 · NextAuth · Recharts<br>
+    Customer-experience intelligence dashboard for a Qatar food-delivery operation<br><br>
+    Technical documentation for engineers and external reviewers
+  </div>
+</div>
+
+<h1>Rafeeq Analytics — Frontend</h1>
+<p class="small">A Next.js dashboard that visualises the backend's three intelligence pillars. It is a thin presentation layer:
+all heavy computation happens server-side, the frontend fetches JSON, scopes it to a time window, and renders charts, tables,
+maps, and a conversational assistant — fully bilingual (English / Arabic with RTL).</p>
+
+<h2 id="toc">0. Table of Contents</h2>
+<div class="toc">
+<ol>
+  <li><a href="#overview">Overview &amp; Tech Stack</a></li>
+  <li><a href="#arch">App Architecture &amp; Provider Tree</a></li>
+  <li><a href="#auth">Authentication &amp; Roles</a></li>
+  <li><a href="#state">Global State (Contexts)</a></li>
+  <li><a href="#data">Data Layer (api.ts)</a></li>
+  <li><a href="#patterns">The Universal Page Data-Flow Pattern</a></li>
+  <li><a href="#i18n">Internationalisation &amp; RTL</a></li>
+  <li><a href="#pages">Page-by-Page Reference</a></li>
+  <li><a href="#components">Component Catalogue</a></li>
+  <li><a href="#map">Frontend → Backend Endpoint Map</a></li>
+</ol>
+</div>
+
+<h2 id="overview">1. Overview &amp; Tech Stack</h2>
+<table>
+<tr><th>Concern</th><th>Technology</th></tr>
+<tr><td>Framework</td><td>Next.js 16 (App Router), React 19, TypeScript</td></tr>
+<tr><td>Styling</td><td>Tailwind CSS v4, <code>tw-animate-css</code>, shadcn-style primitives, class-variance-authority</td></tr>
+<tr><td>Auth</td><td>NextAuth v5 (beta) — Google provider + placeholder credentials</td></tr>
+<tr><td>Charts</td><td>Recharts 3</td></tr>
+<tr><td>Maps</td><td>Leaflet + react-leaflet (Qatar call-origin map)</td></tr>
+<tr><td>Markdown</td><td>react-markdown + remark-gfm (chatbot + drivers report)</td></tr>
+<tr><td>Theming</td><td>next-themes (light / dark / system)</td></tr>
+<tr><td>Icons</td><td>lucide-react</td></tr>
+<tr><td>Fonts</td><td>Geist (sans/mono), Archivo (display) via next/font/google; Cairo (Arabic) self-hosted via next/font/local</td></tr>
+</table>
+<p>The API base is configurable via <code>NEXT_PUBLIC_API_URL</code> (defaults to <code>http://localhost:8000</code>).</p>
+
+<h2 id="arch">2. App Architecture &amp; Provider Tree</h2>
+<p>The App Router structure: a single root layout wraps every route in a stack of client-side providers.
+<code>app/layout.tsx</code>:</p>
+<div class="flow"><pre style="background:none;color:#1a1a2e;padding:0">
+&lt;html&gt; (font variables: Geist, Archivo, Cairo)
+ └ SessionProvider                 (NextAuth session)
+    └ ThemeProvider                (next-themes — light/dark/system)
+       └ SettingsProvider          (auto-refresh cadence, SLAs, thresholds, language)
+          └ TimeFilterProvider     (app-wide WTD/MTD/QTD/YTD/All window)
+             └ MessageStatusProvider  (client-side flagged/resolved state)
+                └ NotificationsProvider (role-aware derived alerts)
+                   └ {page}
+</pre></div>
+
+<h3>Routes</h3>
+<table>
+<tr><th>Route</th><th>Page</th><th>Pillar</th></tr>
+<tr><td><code>/</code></td><td>Call Intelligence (home)</td><td>01</td></tr>
+<tr><td><code>/cx-dashboard</code></td><td>CX Analytics Dashboard (cross-pillar)</td><td>all</td></tr>
+<tr><td><code>/messages</code></td><td>Support Messages</td><td>02</td></tr>
+<tr><td><code>/cancellations</code></td><td>Cancellation Intelligence</td><td>03</td></tr>
+<tr><td><code>/chatbot</code></td><td>Conversational assistant</td><td>assistant</td></tr>
+<tr><td><code>/settings</code></td><td>App settings</td><td>—</td></tr>
+<tr><td><code>/help</code></td><td>Help &amp; glossary</td><td>—</td></tr>
+<tr><td><code>/login</code></td><td>Sign-in</td><td>—</td></tr>
+<tr><td><code>/api/auth/[...nextauth]</code></td><td>NextAuth route handler</td><td>—</td></tr>
+</table>
+<p>Every dashboard shares the same chrome: a <code>Sidebar</code> (navigation) and a <code>Topbar</code> (search, time-range,
+notifications bell, account menu, theme/language toggles).</p>
+
+<h2 id="auth">3. Authentication &amp; Roles</h2>
+<p>Auth is NextAuth v5, split across <code>auth.config.ts</code> (edge-safe config + route gate) and <code>auth.ts</code>
+(providers + callbacks).</p>
+<ul>
+  <li><strong>Google provider</strong> — only enabled once <code>AUTH_GOOGLE_ID</code> exists. A hard domain gate rejects any
+      verified email not on <code>@gorafeeq.com</code>.</li>
+  <li><strong>Placeholder credentials provider</strong> — the current live login: any <code>@gorafeeq.com</code> email plus a
+      shared <code>DEV_LOGIN_PASSWORD</code> (default <code>rafeeq</code>). Explicitly insecure, a stand-in until Google OAuth is
+      provisioned.</li>
+  <li><strong>Legacy full bypass</strong> — <code>NEXT_PUBLIC_AUTH_BYPASS=true</code> disables the login screen entirely; off by
+      default, superseded by the placeholder login.</li>
+</ul>
+<div class="callout warn">The route gate lives in the <code>authorized()</code> callback: unauthenticated users are redirected to
+<code>/login</code>; logged-in users hitting <code>/login</code> bounce to the app.</div>
+<h3>Roles</h3>
+<p>A <strong>role</strong> (<code>employee</code> | <code>manager</code>) is chosen at login, persisted into the JWT, and exposed on
+the session (<code>lib/roles.ts</code>, read via <code>useRole()</code>). It drives which notifications a user receives:
+employees get SLA + cancellation alerts; managers additionally get agent-helpfulness alerts (which name the agent).</p>
+
+<h2 id="state">4. Global State (Contexts)</h2>
+<p>Four React contexts in <code>lib/</code> hold app-wide state. All persist to <code>localStorage</code> and sync across browser
+tabs via the <code>storage</code> event.</p>
+<table>
+<tr><th>Context</th><th>Holds</th><th>Drives</th></tr>
+<tr><td><code>settings-context</code></td><td>refresh cadence, chat/general SLA hours, cancel &amp; sentiment-spike thresholds, alert toggles, confidence %, language</td><td>auto-refresh, threshold alerts, notification filtering, RTL flip. Also exports <code>useAutoRefresh(cb)</code>, a shared interval hook.</td></tr>
+<tr><td><code>time-filter-context</code></td><td>the selected range (WTD/MTD/QTD/YTD/All) + derived <code>{start,end}</code> params + a stable <code>queryKey</code></td><td>every dashboard's window — both client filtering and server re-queries</td></tr>
+<tr><td><code>message-status-context</code></td><td>per-message <code>flagged</code> / <code>resolved</code> flags (client-only; no backend mutation endpoint yet)</td><td>message table state; resolving clears the SLA notification</td></tr>
+<tr><td><code>notifications-context</code></td><td>role-aware notifications <em>derived</em> from live data</td><td>the top-bar bell panel</td></tr>
+</table>
+<h3>How notifications are derived</h3>
+<p>The notifications provider does not call a notifications endpoint — it re-derives alerts from the same dashboard data on the
+same auto-refresh cadence: SLA breaches from <code>fetchMessages()</code> (handling time vs SLA target), high-risk cancellations
+from <code>fetchLiveQueue()</code> (orders flagged "high"), and poor helpfulness from <code>fetchCalls()</code> (manager only).
+Read/dismissed state is persisted with stable per-alert ids.</p>
+
+<h2 id="data">5. Data Layer (lib/api.ts)</h2>
+<p><code>lib/api.ts</code> is the single typed gateway to the backend. Two primitives wrap <code>fetch</code>:</p>
+<pre>const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
+apiFetch(path)        // GET, { cache: "no-store" }, returns null on any error
+apiPost(path, body)   // POST JSON, { cache: "no-store" }, returns null on error</pre>
+<div class="callout"><strong>No client cache:</strong> every request uses <code>cache: "no-store"</code>, so the browser never serves
+stale data. Caching is the backend's job (its 5-minute TTL caches). Errors return <code>null</code> rather than throwing, so a
+failed panel keeps its previous data instead of crashing the page.</div>
+<h3>Notable fetchers</h3>
+<table>
+<tr><th>Function</th><th>Hits</th><th>Notes</th></tr>
+<tr><td><code>fetchCalls()</code></td><td><code>/calls</code></td><td>Pages through up to 1000 calls (200/page), maps to <code>CallRecord</code></td></tr>
+<tr><td><code>fetchMessages()</code></td><td><code>/api/v1/sentiment/results</code></td><td>Pages up to 1000; maps API shape → <code>SupportMessage</code>, derives time-of-day + handling minutes</td></tr>
+<tr><td><code>fetchAllMessagesData(range)</code></td><td>5 endpoints in parallel</td><td>Raw feed (client-filtered) + pre-aggregated panels (server-windowed via <code>?start&amp;end</code>)</td></tr>
+<tr><td><code>fetchAllCancellationData(range)</code></td><td>11 endpoints in parallel</td><td>All cancellation analytics + model info + live queue; drivers report fetched separately (slow)</td></tr>
+<tr><td><code>fetchLiveQueue</code>, <code>explainOrder</code>, <code>askCancellationChat</code></td><td>/api/cancellation/*</td><td>Live scoring, per-order explanation, Q&amp;A</td></tr>
+</table>
+
+<h2 id="patterns">6. The Universal Page Data-Flow Pattern</h2>
+<p>Every dashboard page follows the same lifecycle, so understanding one explains them all:</p>
+<div class="flow"><pre style="background:none;color:#1a1a2e;padding:0">
+1. Mount        → loadData(range, background=false)   shows full skeleton
+2. Range change → effect on timeFilter.queryKey → loadData(range, true)   background refresh
+3. Auto-refresh → useAutoRefresh(() => loadData(range, true))   on the Settings cadence
+4. Manual       → RefreshStatus "Refresh" button → loadData(range, true)
+
+Two kinds of data, two scoping strategies:
+  • Record lists (calls, messages)  → fetched in full, filtered CLIENT-SIDE via
+        filterByRange() so toggling the range re-scopes instantly.
+  • Pre-aggregated panels (trends, heatmaps, cancellation analytics) → re-queried
+        SERVER-SIDE with ?start&amp;end for the selected window.
+</pre></div>
+<p>The selected window comes from <code>useTimeFilter()</code>; the cadence from <code>useAutoRefresh()</code>
+(default 120s, configurable 30s–10min or Off in Settings). "background" loads skip the skeleton so the UI doesn't flash.</p>
+
+<h2 id="i18n">7. Internationalisation &amp; RTL</h2>
+<p><code>lib/i18n.tsx</code> is a lightweight dictionary keyed by semantic strings (<code>nav.*</code>, <code>cx.*</code>,
+<code>cancel.*</code>, …), each with <code>en</code> + <code>ar</code> values. Usage:</p>
+<pre>const t = useT()              // t("nav.settings") → "Settings" | "الإعدادات"
+t("set.slaBreachDesc", { chat: 4 })   // interpolates {chat}
+const tv = useTV()            // value-map translator for dynamic data labels</pre>
+<p>The active language lives in <code>settings.language</code>. Selecting Arabic flips the whole document to RTL
+(<code>SettingsProvider</code> sets <code>&lt;html dir="rtl" lang="ar"&gt;</code>). Arabic renders in the self-hosted Cairo
+typeface; charts are forced back to LTR so Recharts geometry stays correct.</p>
+
+<h2 id="pages">8. Page-by-Page Reference</h2>
+
+<h3>8.1 Call Intelligence — <code>/</code> (Pillar 01)</h3>
+<p>The home dashboard. Loads existing calls via <code>fetchCalls()</code>; calls carry a per-record <code>datetime</code> so the
+entire page (stat cards, charts, Qatar map, table) derives from one client-filtered set (<code>scopedCalls</code>).</p>
+<ul>
+  <li><strong>Upload &amp; analyse:</strong> users drop <code>.txt/.csv/.json</code> transcripts; the page parses them client-side and POSTs to <code>/analyse/batch</code> in chunks of 100, prepending results to the list.</li>
+  <li><strong>Renders:</strong> 4 stat cards, <code>FilterBar</code> (category/sentiment/agent + CSV export), <code>QatarMap</code> (Leaflet call-origin map), <code>CallTable</code>, <code>SentimentTrend</code>, <code>ToneChart</code>, <code>IntentPanel</code> (click-to-filter), <code>CategoryBreakdown</code>, <code>TopTopics</code>.</li>
+</ul>
+
+<h3>8.2 CX Dashboard — <code>/cx-dashboard</code> (cross-pillar)</h3>
+<p>The single-pane health view. <code>loadData</code> fetches from <em>six</em> sources in parallel — calls, all message data,
+cancellation trend, cancellation by-zone, feature importance, cancellation by-actor — blending all three pillars. Calls/messages
+are client-scoped; cancellation aggregates are server-windowed.</p>
+<p>Renders top-line KPIs (interactions, sentiment, cancellation rate, resolution, bot containment, escalation), a weekly CX
+health score, top complaints, text sentiment, and cancellation drivers. Resolution-time and chatbot-telemetry panels are behind a
+"Work in progress" overlay (no backing data source yet) using mock previews.</p>
+
+<h3>8.3 Support Messages — <code>/messages</code> (Pillar 02)</h3>
+<p>Uses <code>fetchAllMessagesData(range)</code>: the raw feed is filtered client-side; <code>TopNegativeTriggers</code>,
+<code>CrossChannelComparison</code>, <code>SentimentByZoneTime</code>, and <code>MessageSentimentTrend</code> are re-queried
+server-side per window. Deep-linkable: <code>/messages?msg=MSG-XXXX</code> (from a notification) opens that message's detail modal.</p>
+<ul>
+  <li><strong>Threshold alerts:</strong> a sentiment-spike alert (negative jump week-over-week past <code>sentimentSpikePct</code>) and an SLA-breach indicator (handling time = <code>closed_at − created_at</code> vs the channel's SLA target).</li>
+  <li>Flag/resolve actions write to <code>message-status-context</code> (local only).</li>
+</ul>
+
+<h3>8.4 Cancellations — <code>/cancellations</code> (Pillar 03)</h3>
+<p><code>fetchAllCancellationData(range)</code> loads every analytics panel + model info + the live high-risk queue; the Gemini
+drivers report is fetched separately so the charts paint first. A <strong>prediction-engine selector</strong>
+(<code>auto</code>/<code>model</code>/<code>gemini</code>) controls live-queue scoring.</p>
+<ul>
+  <li><strong>Renders:</strong> stat cards, weekly cancel-rate line, drivers (model + Gemini report), by-actor, zone×time heatmap, by-zone, by-day, the live high-risk queue (per-order "Explain" calls <code>explainOrder()</code>), model-performance card, and an "Ask the Cancellation Analyst" chat (<code>askCancellationChat()</code>).</li>
+  <li><strong>Cancellation-rate alert:</strong> zones above <code>cancelThresholdPct</code> with meaningful volume.</li>
+</ul>
+
+<h3>8.5 Chatbot — <code>/chatbot</code></h3>
+<p>A conversational UI that POSTs the full message history to <code>/chat</code>. Supports image attachments (read as base64) and
+browser speech-to-text. Bot replies render as GitHub-flavoured Markdown (tables, headings, blockquotes).</p>
+
+<h3>8.6 Settings — <code>/settings</code></h3>
+<p>The control panel that writes to <code>settings-context</code>: appearance (theme + language), auto-refresh interval, SLA
+targets, alert thresholds + channels, notification toggles, ML confidence threshold. Some sections (keyword→intent simulator,
+external integrations) are flagged work-in-progress.</p>
+
+<h3>8.7 Help &amp; Login</h3>
+<p><strong>Help</strong> — metrics glossary, ML-classifier guide, FAQ, and an internal feedback form. <strong>Login</strong> — the
+placeholder credentials form (work email + shared password + role select), or the Google button once OAuth is live.</p>
+
+<h2 id="components">9. Component Catalogue</h2>
+<p>Reusable presentation components live in <code>components/rafeeq/</code>. Highlights:</p>
+<table>
+<tr><th>Group</th><th>Components</th></tr>
+<tr><td>Chrome</td><td><code>sidebar</code>, <code>topbar</code>, <code>notification-panel</code>, <code>refresh-status</code>, <code>time-range-select</code>, <code>theme-toggle</code>, <code>logo</code>, <code>brand-badge</code></td></tr>
+<tr><td>Calls (P1)</td><td><code>call-table</code>, <code>call-detail-modal</code>, <code>sentiment-trend</code>, <code>tone-chart</code>, <code>intent-panel</code>, <code>category-breakdown</code>, <code>top-topics</code>, <code>qatar-map-leaflet</code>, <code>hero-banner</code>, <code>filter-bar</code></td></tr>
+<tr><td>Messages (P2)</td><td><code>message-feed-table</code>, <code>message-detail-modal</code>, <code>top-negative-triggers</code>, <code>cross-channel-comparison</code>, <code>sentiment-by-zone-time</code>, <code>message-sentiment-trend</code></td></tr>
+<tr><td>Cancellations (P3)</td><td><code>cancellation-chat</code></td></tr>
+<tr><td>Shared UI</td><td><code>stat-card</code>, <code>panel</code>, <code>dropdown</code>, <code>column-filter</code>, <code>threshold-alert</code>, <code>loading-screen</code>, <code>work-in-progress</code>, <code>role-select</code></td></tr>
+</table>
+<p>Mock data modules (<code>lib/mock-*.ts</code>) back the work-in-progress panels and provide types; real data always comes from
+<code>api.ts</code>.</p>
+
+<h2 id="map">10. Frontend → Backend Endpoint Map</h2>
+<table>
+<tr><th>Page / Feature</th><th>Frontend call</th><th>Backend endpoint(s)</th></tr>
+<tr><td>Call Intelligence list</td><td><code>fetchCalls()</code></td><td><code>GET /calls</code></td></tr>
+<tr><td>Call upload/analyse</td><td><code>fetch /analyse/batch</code></td><td><code>POST /analyse/batch</code></td></tr>
+<tr><td>Support Messages</td><td><code>fetchAllMessagesData()</code></td><td><code>/api/v1/sentiment/results</code> + <code>/api/v1/analytics/{top-negative-triggers,cross-channel,sentiment-trend,zone-heatmap}</code></td></tr>
+<tr><td>Cancellations</td><td><code>fetchAllCancellationData()</code></td><td><code>/api/cancellation/analytics/*</code>, <code>/model/info</code>, <code>/predict/live-queue</code></td></tr>
+<tr><td>Cancellation explain / chat</td><td><code>explainOrder()</code>, <code>askCancellationChat()</code></td><td><code>POST /api/cancellation/explain/{id}</code>, <code>POST /api/cancellation/chat</code></td></tr>
+<tr><td>Drivers report</td><td><code>fetchDriversReport()</code></td><td><code>GET /api/cancellation/analytics/drivers-report</code></td></tr>
+<tr><td>Chatbot</td><td><code>fetch /chat</code></td><td><code>POST /chat</code></td></tr>
+<tr><td>CX Dashboard</td><td>6 parallel fetchers</td><td>calls + messages analytics + cancellation trend/zone/actor + feature-importance</td></tr>
+<tr><td>Notifications bell</td><td><code>fetchMessages</code>, <code>fetchLiveQueue</code>, <code>fetchCalls</code></td><td>derived client-side from those endpoints</td></tr>
+</table>
+
+<p class="small" style="margin-top:24pt; text-align:center; color:#999">Rafeeq Analytics — Frontend reference · generated from a full source scan</p>
+
+</body>
+</html>

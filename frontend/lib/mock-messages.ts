@@ -17,5 +17,12 @@ export type SupportMessage = {
   date: string
   merchant?: string
   suggestedReply: string
+  /** True once the conversation has been closed (has a closed_at). */
   resolved: boolean
+  /** Conversation END time ("YYYY-MM-DD HH:mm"); undefined while still open. */
+  closedAt?: string
+  /** Handling time in minutes (closed_at − created_at); undefined while open. */
+  handlingMinutes?: number
+  /** Human agent who handled/closed the chat; undefined ⇒ bot/customer-only. */
+  agentName?: string
 }

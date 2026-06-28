@@ -6,6 +6,7 @@ import remarkGfm from "remark-gfm"
 import { Sidebar } from "@/components/rafeeq/sidebar"
 import { Paperclip, Mic, Send, Bot, User, Loader2, X, Diamond, MessageSquare } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useT } from "@/lib/i18n"
 
 interface ChatMessage {
   role: "user" | "bot"
@@ -16,14 +17,15 @@ interface ChatMessage {
   }
 }
 
-const SUGGESTIONS = [
-  "Summarize the latest sentiment trends",
-  "Which areas have the most complaints?",
-  "Show me restaurant insights",
-  "What is our overall containment rate?"
+const SUGGESTION_KEYS = [
+  "bot.suggestion1",
+  "bot.suggestion2",
+  "bot.suggestion3",
+  "bot.suggestion4",
 ]
 
 export default function ChatbotPage() {
+  const t = useT()
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState("")
   const [isLoading, setIsLoading] = useState(false)
@@ -65,7 +67,7 @@ export default function ChatbotPage() {
       setMessages([...newMessages, { role: "bot", text: data.text }])
     } catch (error) {
       console.error(error)
-      setMessages([...newMessages, { role: "bot", text: "Sorry, I encountered an error. Please try again later." }])
+      setMessages([...newMessages, { role: "bot", text: t("bot.error") }])
     } finally {
       setIsLoading(false)
     }
@@ -102,7 +104,7 @@ export default function ChatbotPage() {
 
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
     if (!SpeechRecognition) {
-      alert("Speech recognition is not supported in your browser.")
+      alert(t("bot.speechUnsupported"))
       return
     }
 
@@ -141,7 +143,7 @@ export default function ChatbotPage() {
         <header className="glass-strong z-10 flex items-center justify-between border-x-0 border-t-0 px-6 py-4 md:px-8">
           <h1 className="flex items-center gap-3 text-xl font-bold tracking-tight text-foreground">
             <MessageSquare className="size-5 text-accent" />
-            Rafeeq Chatbot
+            {t("bot.title")}
           </h1>
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2 rounded-full border border-border bg-secondary/50 px-3 py-1.5 text-sm font-medium text-accent">
@@ -164,23 +166,23 @@ export default function ChatbotPage() {
                   <Bot className="size-8 text-primary-foreground" />
                 </div>
                 <h2 className="mb-3 bg-gradient-to-r from-foreground to-muted-foreground bg-clip-text text-3xl font-extrabold text-transparent">
-                  Hello, I'm Rafeeq Intelligence
+                  {t("bot.greeting")}
                 </h2>
                 <p className="mb-10 max-w-lg text-lg text-muted-foreground">
-                  I can analyze your dashboard data, summarize sentiment trends, and provide insights. How can I help you today?
+                  {t("bot.intro")}
                 </p>
 
                 <div className="grid w-full max-w-2xl grid-cols-1 gap-3 sm:grid-cols-2">
-                  {SUGGESTIONS.map((suggestion, idx) => (
+                  {SUGGESTION_KEYS.map((key) => (
                     <button
-                      key={idx}
-                      onClick={() => handleSend(suggestion)}
+                      key={key}
+                      onClick={() => handleSend(t(key))}
                       className="glass group flex items-center gap-3 rounded-2xl p-4 text-left transition-all duration-300 hover:-translate-y-0.5"
                     >
                       <div className="flex size-8 items-center justify-center rounded-full bg-accent/10 transition-colors group-hover:bg-accent/20">
                         <MessageSquare className="size-4 text-accent" />
                       </div>
-                      <span className="text-sm font-medium text-foreground/80 group-hover:text-foreground">{suggestion}</span>
+                      <span className="text-sm font-medium text-foreground/80 group-hover:text-foreground">{t(key)}</span>
                     </button>
                   ))}
                 </div>
@@ -272,7 +274,7 @@ export default function ChatbotPage() {
                 </div>
                 <div className="glass flex max-w-[85%] items-center gap-2 rounded-2xl rounded-tl-sm px-5 py-4">
                   <Loader2 className="size-4 animate-spin text-accent" />
-                  <span className="text-sm text-muted-foreground">Analyzing dashboard data...</span>
+                  <span className="text-sm text-muted-foreground">{t("bot.analyzing")}</span>
                 </div>
               </div>
             )}
@@ -307,7 +309,7 @@ export default function ChatbotPage() {
               <button
                 onClick={() => fileInputRef.current?.click()}
                 className="shrink-0 rounded-full p-3 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-                title="Attach Image"
+                title={t("bot.attachImage")}
               >
                 <Paperclip className="size-5" />
               </button>
@@ -317,7 +319,7 @@ export default function ChatbotPage() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Ask Rafeeq about the dashboard data..."
+                placeholder={t("bot.placeholder")}
                 className="flex-1 border-none bg-transparent px-2 text-[15px] text-foreground outline-none placeholder:text-muted-foreground"
               />
 
@@ -329,7 +331,7 @@ export default function ChatbotPage() {
                     ? "bg-negative/10 text-negative hover:bg-negative/20"
                     : "text-muted-foreground hover:bg-secondary hover:text-foreground"
                 )}
-                title="Voice Input"
+                title={t("bot.voiceInput")}
               >
                 <Mic className="size-5" />
                 {isRecording && <span className="absolute right-2 top-2 size-2 animate-ping rounded-full bg-negative" />}
@@ -345,7 +347,7 @@ export default function ChatbotPage() {
             </div>
 
             <p className="mt-3 text-center text-[11px] font-medium tracking-wide text-muted-foreground">
-              AI can make mistakes. Consider verifying important information with the raw analytics tables.
+              {t("bot.disclaimer")}
             </p>
           </div>
         </div>

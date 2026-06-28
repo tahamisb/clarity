@@ -106,11 +106,14 @@ async def get_results(
             negative_trigger=r.get("negative_trigger"), model_version=r["model_version"],
             classified_at=str(r["classified_at"]),
         )
+        closed_at_raw = r.get("msg_closed_at")
         msg = MessageResponse(
             message_id=r["message_id"], customer_id=r.get("customer_id"), content=r["content"],
             source_channel=r["source_channel"], merchant_name=r.get("merchant_name"),
             zone=r.get("zone"), created_at=str(r.get("msg_created_at", "")),
             ingested_at=str(r.get("msg_ingested_at", "")),
+            closed_at=str(closed_at_raw) if closed_at_raw else None,
+            agent_name=r.get("agent_name"),
         )
         items.append(ClassificationWithMessage(classification=clf, message=msg))
 

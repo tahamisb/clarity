@@ -10,7 +10,9 @@ from __future__ import annotations
 import logging
 import subprocess
 import sys
+from datetime import date
 from pathlib import Path
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -66,46 +68,62 @@ async def live_queue(limit: int = Query(50, ge=1, le=200), engine: str = Query("
 
 # ===========================================================================
 # Analytics
+#
+# All analytics endpoints accept an optional [start, end] date window
+# (YYYY-MM-DD) so every chart/table re-aggregates over the selected range.
+# Omitting both returns the full history.
 # ===========================================================================
 
+def _window(start: Optional[str], end: Optional[str]) -> tuple[Optional[str], Optional[str]]:
+    """Validate the date bounds (YYYY-MM-DD) and return them untouched."""
+    for label, value in (("start", start), ("end", end)):
+        if value is None:
+            continue
+        try:
+            date.fromisoformat(value)
+        except ValueError:
+            raise HTTPException(status_code=422, detail=f"{label} must be a YYYY-MM-DD date")
+    return start, end
+
+
 @router.get("/analytics/trend")
-async def analytics_trend():
-    return await svc.get_trend()
+async def analytics_trend(start: Optional[str] = Query(None), end: Optional[str] = Query(None)):
+    return await svc.get_trend(*_window(start, end))
 
 
 @router.get("/analytics/by-merchant")
-async def analytics_by_merchant():
-    return await svc.get_by_merchant()
+async def analytics_by_merchant(start: Optional[str] = Query(None), end: Optional[str] = Query(None)):
+    return await svc.get_by_merchant(*_window(start, end))
 
 
 @router.get("/analytics/by-zone")
-async def analytics_by_zone():
-    return await svc.get_by_zone()
+async def analytics_by_zone(start: Optional[str] = Query(None), end: Optional[str] = Query(None)):
+    return await svc.get_by_zone(*_window(start, end))
 
 
 @router.get("/analytics/by-time")
-async def analytics_by_time():
-    return await svc.get_by_time()
+async def analytics_by_time(start: Optional[str] = Query(None), end: Optional[str] = Query(None)):
+    return await svc.get_by_time(*_window(start, end))
 
 
 @router.get("/analytics/by-day")
-async def analytics_by_day():
-    return await svc.get_by_dow()
+async def analytics_by_day(start: Optional[str] = Query(None), end: Optional[str] = Query(None)):
+    return await svc.get_by_dow(*_window(start, end))
 
 
 @router.get("/analytics/by-order-size")
-async def analytics_by_order_size():
-    return await svc.get_by_order_size()
+async def analytics_by_order_size(start: Optional[str] = Query(None), end: Optional[str] = Query(None)):
+    return await svc.get_by_order_size(*_window(start, end))
 
 
 @router.get("/analytics/by-actor")
-async def analytics_by_actor():
-    return await svc.get_by_actor()
+async def analytics_by_actor(start: Optional[str] = Query(None), end: Optional[str] = Query(None)):
+    return await svc.get_by_actor(*_window(start, end))
 
 
 @router.get("/analytics/crosstabs")
-async def analytics_crosstabs():
-    return await svc.get_crosstabs()
+async def analytics_crosstabs(start: Optional[str] = Query(None), end: Optional[str] = Query(None)):
+    return await svc.get_crosstabs(*_window(start, end))
 
 
 @router.get("/analytics/drivers-report")

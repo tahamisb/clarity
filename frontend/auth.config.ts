@@ -9,40 +9,59 @@ import Google from "next-auth/providers/google"
 export const ALLOWED_DOMAIN = "gorafeeq.com"
 
 /**
- * TEMPORARY DEV BYPASS.
- * When NEXT_PUBLIC_AUTH_BYPASS === "true", all route protection is disabled and
- * the whole app is reachable WITHOUT signing in. This exists only because we do
- * not yet have Google OAuth credentials (waiting on a managed client from IT).
- *
- * The entire auth system below stays in place — flip this flag back to false
- * (or remove it) once AUTH_GOOGLE_ID / AUTH_GOOGLE_SECRET are filled in.
- * See AUTH_SETUP.md → "Temporary auth bypass".
+ * TEMPORARY PLACEHOLDER LOGIN (until IT provisions real Google OAuth).
+ * A NextAuth Credentials provider (configured in auth.ts) accepts ANY
+ * @gorafeeq.com email plus this shared password. It is intentionally NOT
+ * secure — it's a stand-in so the team can use the app and the login UX is
+ * real. Swap to Google by filling AUTH_GOOGLE_ID / AUTH_GOOGLE_SECRET and
+ * removing the credentials provider. See AUTH_SETUP.md.
+ */
+export const DEV_LOGIN_PASSWORD = process.env.DEV_LOGIN_PASSWORD ?? "rafeeq"
+
+/** True once real Google OAuth credentials exist. */
+export const GOOGLE_ENABLED = !!process.env.AUTH_GOOGLE_ID
+
+/**
+ * Legacy full bypass (no login screen at all). Superseded by the placeholder
+ * login above; kept so it can still be flipped on in a pinch. Default off.
+ * See AUTH_SETUP.md.
  */
 export const AUTH_BYPASS = process.env.NEXT_PUBLIC_AUTH_BYPASS === "true"
 
 export const authConfig = {
+  // Trust the host header — required for self-hosted / `next start` and when
+  // running behind a reverse proxy (otherwise Auth.js throws UntrustedHost).
+  trustHost: true,
   pages: {
     signIn: "/login",
     error: "/login",
   },
   providers: [
-    Google({
-      authorization: {
-        params: {
-          // Restrict the Google account chooser to the gorafeeq.com workspace
-          // and always let the user pick which account to use.
-          hd: ALLOWED_DOMAIN,
-          prompt: "select_account",
-        },
-      },
-    }),
+    // Only offered once real credentials exist. The placeholder Credentials
+    // provider (added in auth.ts) handles login in the meantime.
+    ...(GOOGLE_ENABLED
+      ? [
+          Google({
+            authorization: {
+              params: {
+                // Restrict the Google account chooser to the gorafeeq.com
+                // workspace and always let the user pick which account to use.
+                hd: ALLOWED_DOMAIN,
+                prompt: "select_account",
+              },
+            },
+          }),
+        ]
+      : []),
   ],
   callbacks: {
     /**
-     * Hard gate: reject anyone whose verified email is not on the allowed
-     * domain. This runs server-side, so it cannot be bypassed from the client.
+     * Hard gate for Google sign-in: reject anyone whose verified email is not
+     * on the allowed domain. (The placeholder Credentials provider enforces the
+     * domain inside its own authorize() function.)
      */
-    signIn({ profile }) {
+    signIn({ account, profile }) {
+      if (account?.provider === "credentials") return true
       const email = (profile?.email ?? "").toLowerCase()
       const verified = profile?.email_verified
       return Boolean(verified) && email.endsWith(`@${ALLOWED_DOMAIN}`)

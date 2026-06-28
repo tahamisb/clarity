@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useMemo, useEffect, useCallback } from "react"
+import React, { useState, useMemo, useEffect, useCallback, useRef } from "react"
 import { Ban, TrendingDown, TrendingUp, AlertTriangle, Target, Loader2, RefreshCw } from "lucide-react"
 import { Sidebar } from "@/components/rafeeq/sidebar"
 import { Topbar } from "@/components/rafeeq/topbar"
@@ -8,8 +8,12 @@ import { StatCard } from "@/components/rafeeq/stat-card"
 import { CancellationLoading } from "@/components/rafeeq/loading-screen"
 import { CancellationChat } from "@/components/rafeeq/cancellation-chat"
 import { RefreshStatus } from "@/components/rafeeq/refresh-status"
+import { GlobalTimeRange } from "@/components/rafeeq/time-range-select"
 import { ThresholdAlert } from "@/components/rafeeq/threshold-alert"
 import { useAutoRefresh, useSettings } from "@/lib/settings-context"
+import { useTimeFilter } from "@/lib/time-filter-context"
+import { type TimeRange } from "@/lib/time-range"
+import { useT, useTV } from "@/lib/i18n"
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer,
   BarChart, Bar, Cell,
@@ -19,6 +23,7 @@ import {
   fetchLiveQueue,
   fetchDriversReport,
   explainOrder,
+  clearServerCache,
   type CancelTrend, type CancelByMerchant, type CancelByZone, type TimeCancelRow,
   type DowCancelRow, type ActorRow, type CancelCrosstabs, type DriversReport,
   type FeatureImportance, type ModelInfo, type LiveQueue, type CancelPrediction,
@@ -35,11 +40,14 @@ function riskPill(level: string) {
 }
 
 export default function CancellationsPage() {
+  const t = useT()
+  const tv = useTV()
   const [search, setSearch] = useState("")
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const { settings } = useSettings()
+  const { range, queryKey } = useTimeFilter()
 
   const [trend, setTrend] = useState<CancelTrend | null>(null)
   const [byMerchant, setByMerchant] = useState<CancelByMerchant | null>(null)
@@ -65,10 +73,12 @@ export default function CancellationsPage() {
   // Load dashboard data. `background` skips the full-page skeleton (auto-refresh
   // and manual refresh) and intentionally does NOT regenerate the Gemini drivers
   // report, which is a slow/billed call we don't want to re-run every tick.
-  const loadData = useCallback((background = false) => {
+  const loadData = useCallback((r: TimeRange, background = false) => {
     if (background) setRefreshing(true)
     else setLoading(true)
-    fetchAllCancellationData().then((d) => {
+    // A refresh re-reads from BigQuery; bust the server cache first so it does.
+    const ready = background ? clearServerCache() : Promise.resolve()
+    ready.then(() => fetchAllCancellationData(r)).then((d) => {
       setTrend(d.trend)
       setByMerchant(d.byMerchant)
       setByZone(d.byZone)
@@ -96,12 +106,20 @@ export default function CancellationsPage() {
   }, [engine])
 
   useEffect(() => {
-    loadData(false)
+    loadData(range, false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Re-aggregate every chart/table for the new window when the range changes.
+  const firstRange = useRef(true)
+  useEffect(() => {
+    if (firstRange.current) { firstRange.current = false; return }
+    loadData(range, true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queryKey])
+
   // Re-fetch on the cadence configured on the Settings page.
-  useAutoRefresh(() => loadData(true))
+  useAutoRefresh(() => loadData(range, true))
 
   // Cancellation-rate alert: zones (with meaningful volume) whose cancel rate
   // exceeds the configured threshold (Settings → SLA & Alert Configurations).
@@ -111,8 +129,8 @@ export default function CancellationsPage() {
       .filter((z) => z.total_orders >= 50 && z.cancel_rate_pct > settings.cancelThresholdPct)
       .sort((a, b) => b.cancel_rate_pct - a.cancel_rate_pct)
       .slice(0, 6)
-      .map((z) => `${z.zone} — ${z.cancel_rate_pct.toFixed(1)}% (limit ${settings.cancelThresholdPct}%)`)
-  }, [byZone, settings.cancelThresholdPct])
+      .map((z) => t("cancel.breachItem", { zone: z.zone, rate: z.cancel_rate_pct.toFixed(1), limit: settings.cancelThresholdPct }))
+  }, [byZone, settings.cancelThresholdPct, t])
 
   // -------------------------------------------------------------------------
   // Derived stats
@@ -142,7 +160,8 @@ export default function CancellationsPage() {
     return { totalCancelled, overallRate, wow, topDriver, riskZone }
   }, [trend, driversReport, featureImportance, byActor, byZone])
 
-  // Trend chart data (weekly cancellation rate)
+  // Trend chart data (weekly cancellation rate). The backend already scopes the
+  // trend to the selected window, so we map the weekly series straight through.
   const trendData = useMemo(
     () => (trend?.weekly ?? []).map((w) => ({ week: w.period, rate: w.cancel_rate_pct })),
     [trend],
@@ -249,49 +268,52 @@ export default function CancellationsPage() {
       <Sidebar />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar title="Cancellation Intelligence" search={search} onSearch={setSearch} />
+        <Topbar title={t("cancel.title")} search={search} onSearch={setSearch} />
 
         <main className="flex flex-1 flex-col gap-6 p-4 md:p-6">
 
           <div className="flex flex-col items-start gap-3 border-b border-border pb-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
-                Cancellation Intelligence
+                {t("cancel.title")}
               </h1>
               <p className="text-sm text-muted-foreground">
-                Predictive risk models and root-cause analysis for order cancellations across Qatar.
+                {t("cancel.subtitle")}
               </p>
             </div>
-            <RefreshStatus lastUpdated={lastUpdated} refreshing={refreshing} onRefresh={() => loadData(true)} />
+            <div className="flex flex-col items-start gap-3 sm:items-end">
+              <GlobalTimeRange className="lg:hidden" />
+              <RefreshStatus lastUpdated={lastUpdated} refreshing={refreshing} onRefresh={() => loadData(range, true)} />
+            </div>
           </div>
 
           {loading ? (
             <CancellationLoading />
           ) : (
           <>
-          <ThresholdAlert title="Cancellation rate threshold breached" items={cancelBreach} />
+          <ThresholdAlert title={t("cancel.alertBreach")} items={cancelBreach} />
 
           {/* Stat Cards */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
-            <StatCard label="Total Cancellations" value={stats.totalCancelled.toLocaleString()} trend="neutral" icon={Ban} />
-            <StatCard label="Cancellation Rate" value={`${stats.overallRate.toFixed(1)}%`} trend="neutral" icon={Target} />
+            <StatCard label={t("cancel.statTotal")} value={stats.totalCancelled.toLocaleString()} trend="neutral" icon={Ban} />
+            <StatCard label={t("cx.cancellationRate")} value={`${stats.overallRate.toFixed(1)}%`} trend="neutral" icon={Target} />
             <StatCard
-              label="Week-over-Week Change"
-              value={stats.wow === null ? "N/A" : `${stats.wow >= 0 ? "+" : ""}${stats.wow.toFixed(1)} pts`}
+              label={t("cancel.statWow")}
+              value={stats.wow === null ? tv("N/A") : `${stats.wow >= 0 ? "+" : ""}${stats.wow.toFixed(1)} ${t("set.ptsSuffix")}`}
               trend={stats.wow === null ? "neutral" : stats.wow > 0 ? "up" : "down"}
               icon={stats.wow !== null && stats.wow > 0 ? TrendingUp : TrendingDown}
             />
-            <StatCard label="Top Driver" value={stats.topDriver} trend="neutral" icon={AlertTriangle} />
-            <StatCard label="Highest-Risk Zone" value={stats.riskZone} trend="neutral" icon={AlertTriangle} />
+            <StatCard label={t("cancel.statTopDriver")} value={tv(stats.topDriver)} trend="neutral" icon={AlertTriangle} />
+            <StatCard label={t("cancel.statRiskZone")} value={tv(stats.riskZone)} trend="neutral" icon={AlertTriangle} />
           </div>
 
           {/* Trend + Top Drivers */}
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-[2fr_1.5fr]">
             <div className="flex flex-col rounded-xl border border-border bg-card p-5 shadow-sm">
-              <h2 className="mb-4 text-base font-semibold text-foreground">Cancellation Rate by Week</h2>
+              <h2 className="mb-4 text-base font-semibold text-foreground">{t("cancel.rateByWeek")}</h2>
               <div className="h-[300px] w-full">
                 {trendData.length === 0 ? (
-                  <EmptyChart label="No trend data available" />
+                  <EmptyChart label={t("cancel.noTrend")} />
                 ) : (
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={trendData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
@@ -300,7 +322,7 @@ export default function CancellationsPage() {
                       <YAxis stroke="var(--muted-foreground)" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(v) => `${v}%`} />
                       <RechartsTooltip content={<CustomTooltip />} />
                       <Legend iconType="circle" wrapperStyle={{ fontSize: "12px" }} />
-                      <Line type="monotone" dataKey="rate" name="Cancellation Rate" stroke="var(--primary)" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 6 }} />
+                      <Line type="monotone" dataKey="rate" name={t("cancel.rateLegend")} stroke="var(--primary)" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 6 }} />
                     </LineChart>
                   </ResponsiveContainer>
                 )}
@@ -309,11 +331,11 @@ export default function CancellationsPage() {
 
             <div className="flex flex-col rounded-xl border border-border bg-card p-5 shadow-sm">
               <h2 className="mb-4 text-base font-semibold text-foreground">
-                {featureImportance?.top_features?.length ? "Top Cancellation Drivers (model)" : "Cancellations by Actor"}
+                {featureImportance?.top_features?.length ? t("cancel.topDriversModel") : t("cancel.byActor")}
               </h2>
               <div className="h-[240px] w-full">
                 {driverData.length === 0 ? (
-                  <EmptyChart label="Train the model to see driver importance" />
+                  <EmptyChart label={t("cancel.trainToSeeDrivers")} />
                 ) : (
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={driverData} layout="vertical" margin={{ top: 0, right: 20, left: 30, bottom: 0 }}>
@@ -336,26 +358,26 @@ export default function CancellationsPage() {
           {/* Heatmap + Zone + Day */}
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
             <div className="flex flex-col rounded-xl border border-border bg-card p-5 shadow-sm">
-              <h2 className="mb-4 text-base font-semibold text-foreground">Risk by Zone × Time of Day</h2>
+              <h2 className="mb-4 text-base font-semibold text-foreground">{t("cancel.riskByZoneTime")}</h2>
               {heatmap.zones.length === 0 ? (
-                <EmptyChart label="No cross-tab data available" />
+                <EmptyChart label={t("cancel.noCrosstab")} />
               ) : (
                 <div className="flex-1 overflow-x-auto rounded-lg border border-border">
                   <div className="grid min-w-[420px]" style={{ gridTemplateColumns: `110px repeat(${TIME_BUCKETS.length}, 1fr)` }}>
                     <div className="border-b border-r border-border p-2" />
-                    {TIME_BUCKETS.map((t) => (
-                      <div key={t} className="border-b border-r border-border p-2 text-center text-[11px] font-semibold text-muted-foreground">{t}</div>
+                    {TIME_BUCKETS.map((bucket) => (
+                      <div key={bucket} className="border-b border-r border-border p-2 text-center text-[11px] font-semibold text-muted-foreground">{tv(bucket)}</div>
                     ))}
                     {heatmap.zones.map((zone) => (
                       <React.Fragment key={zone}>
-                        <div className="flex items-center border-b border-r border-border p-2 text-xs font-medium text-muted-foreground">{zone}</div>
-                        {TIME_BUCKETS.map((t) => {
-                          const rate = heatmap.lookup.get(`${zone}__${t}`)
+                        <div className="flex items-center border-b border-r border-border p-2 text-xs font-medium text-muted-foreground">{tv(zone)}</div>
+                        {TIME_BUCKETS.map((bucket) => {
+                          const rate = heatmap.lookup.get(`${zone}__${bucket}`)
                           const has = rate !== undefined
                           const opacity = has ? Math.min(Math.max(rate / heatmap.maxRate, 0.08), 1) : 0
                           return (
                             <div
-                              key={`${zone}-${t}`}
+                              key={`${zone}-${bucket}`}
                               className="flex items-center justify-center border-b border-r border-border p-3 text-xs font-semibold"
                               style={{ backgroundColor: has ? `color-mix(in srgb, var(--destructive) ${opacity * 100}%, transparent)` : "transparent" }}
                             >
@@ -371,14 +393,14 @@ export default function CancellationsPage() {
             </div>
 
             <div className="flex flex-col rounded-xl border border-border bg-card p-5 shadow-sm">
-              <h2 className="mb-4 text-base font-semibold text-foreground">Cancellation Rate by Zone</h2>
+              <h2 className="mb-4 text-base font-semibold text-foreground">{t("cancel.rateByZone")}</h2>
               <div className="min-h-[250px] w-full flex-1">
-                {zoneData.length === 0 ? <EmptyChart label="No zone data" /> : (
+                {zoneData.length === 0 ? <EmptyChart label={t("cancel.noZone")} /> : (
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={zoneData} layout="vertical" margin={{ top: 0, right: 20, left: 30, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--border)" />
                       <XAxis type="number" hide />
-                      <YAxis dataKey="zone" type="category" stroke="var(--muted-foreground)" fontSize={11} tickLine={false} axisLine={false} width={90} />
+                      <YAxis dataKey="zone" type="category" stroke="var(--muted-foreground)" fontSize={11} tickLine={false} axisLine={false} width={90} tickFormatter={tv} />
                       <RechartsTooltip cursor={{ fill: "var(--muted)", opacity: 0.5 }} content={<CustomTooltip />} />
                       <Bar dataKey="rate" radius={[0, 4, 4, 0]} barSize={16}>
                         {zoneData.map((_, i) => (
@@ -392,13 +414,13 @@ export default function CancellationsPage() {
             </div>
 
             <div className="flex flex-col rounded-xl border border-border bg-card p-5 shadow-sm">
-              <h2 className="mb-4 text-base font-semibold text-foreground">Cancellation Rate by Day</h2>
+              <h2 className="mb-4 text-base font-semibold text-foreground">{t("cancel.rateByDay")}</h2>
               <div className="min-h-[250px] w-full flex-1">
-                {dayData.length === 0 ? <EmptyChart label="No day-of-week data" /> : (
+                {dayData.length === 0 ? <EmptyChart label={t("cancel.noDow")} /> : (
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={dayData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
-                      <XAxis dataKey="day" stroke="var(--muted-foreground)" fontSize={12} tickLine={false} axisLine={false} />
+                      <XAxis dataKey="day" stroke="var(--muted-foreground)" fontSize={12} tickLine={false} axisLine={false} tickFormatter={tv} />
                       <YAxis stroke="var(--muted-foreground)" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(v) => `${v}%`} />
                       <RechartsTooltip cursor={{ fill: "var(--muted)", opacity: 0.5 }} content={<CustomTooltip />} />
                       <Bar dataKey="rate" radius={[4, 4, 0, 0]} barSize={24}>
@@ -417,10 +439,9 @@ export default function CancellationsPage() {
           <div className="flex flex-col rounded-xl border border-border bg-card shadow-sm">
             <div className="flex flex-col gap-4 border-b border-border p-5 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h2 className="text-base font-semibold text-foreground">Live High-Risk Queue</h2>
+                <h2 className="text-base font-semibold text-foreground">{t("cancel.liveQueue")}</h2>
                 <p className="text-sm text-muted-foreground">
-                  Active orders scored by{" "}
-                  {liveQueue?.engine === "gemini" ? "Gemini" : "the ML model"}, ranked by cancellation probability.
+                  {t("cancel.liveQueueDesc", { engine: liveQueue?.engine === "gemini" ? "Gemini" : t("engine.mlModel") })}
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -435,18 +456,18 @@ export default function CancellationsPage() {
                         engine === e ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
                       )}
                     >
-                      {e}
+                      {tv(e)}
                     </button>
                   ))}
                 </div>
                 <select className="rounded-lg border border-border bg-background px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary/50"
                   value={zoneFilter} onChange={(e) => setZoneFilter(e.target.value)}>
-                  <option>All Zones</option>
-                  {queueZones.map((z) => <option key={z}>{z}</option>)}
+                  <option value="All Zones">{tv("All Zones")}</option>
+                  {queueZones.map((z) => <option key={z} value={z}>{tv(z)}</option>)}
                 </select>
                 <select className="rounded-lg border border-border bg-background px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary/50"
                   value={riskFilter} onChange={(e) => setRiskFilter(e.target.value)}>
-                  <option>All Risks</option><option>High</option><option>Medium</option><option>Low</option>
+                  {["All Risks", "High", "Medium", "Low"].map((r) => <option key={r} value={r}>{tv(r)}</option>)}
                 </select>
               </div>
             </div>
@@ -454,15 +475,15 @@ export default function CancellationsPage() {
             {queueLoading ? (
               <div className="flex items-center justify-center gap-2 p-10 text-sm text-muted-foreground">
                 <Loader2 className="size-5 animate-spin text-accent" />
-                Scoring orders with {engine === "gemini" ? "Gemini" : "the model"}…
+                {t("cancel.scoringWith", { engine: engine === "gemini" ? "Gemini" : t("engine.mlModel") })}
               </div>
             ) : queueEmpty ? (
               <div className="flex flex-col items-center gap-2 p-10 text-center text-sm text-muted-foreground">
                 <AlertTriangle className="size-6 text-muted-foreground" />
                 <p>
                   {engine !== "gemini" && !modelReady
-                    ? "The cancellation model has not been trained yet — switch the engine to Gemini for an LLM estimate, or train the model."
-                    : "No active orders to score right now."}
+                    ? t("cancel.modelNotTrained")
+                    : t("cancel.noActiveOrders")}
                 </p>
                 {engine !== "gemini" && !modelReady && (
                   <code className="rounded bg-secondary px-2 py-1 text-xs text-accent">python scripts/train_cancellation_model.py</code>
@@ -473,17 +494,17 @@ export default function CancellationsPage() {
                 <table className="w-full text-left text-sm text-foreground">
                   <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
                     <tr>
-                      <th className="px-5 py-3 font-semibold">Order ID</th>
-                      <th className="px-5 py-3 font-semibold">Merchant &amp; Zone</th>
-                      <th className="px-5 py-3 font-semibold">Top Risk Factor</th>
-                      <th className="px-5 py-3 text-center font-semibold">Risk</th>
-                      <th className="px-5 py-3 text-center font-semibold">Score</th>
-                      <th className="px-5 py-3 text-right font-semibold">Action</th>
+                      <th className="px-5 py-3 font-semibold">{t("col.orderId")}</th>
+                      <th className="px-5 py-3 font-semibold">{t("col.merchantZone")}</th>
+                      <th className="px-5 py-3 font-semibold">{t("col.topRiskFactor")}</th>
+                      <th className="px-5 py-3 text-center font-semibold">{t("col.risk")}</th>
+                      <th className="px-5 py-3 text-center font-semibold">{t("col.score")}</th>
+                      <th className="px-5 py-3 text-right font-semibold">{t("col.action")}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
                     {queueOrders.length === 0 ? (
-                      <tr><td colSpan={6} className="p-8 text-center text-muted-foreground">No orders matching filters.</td></tr>
+                      <tr><td colSpan={6} className="p-8 text-center text-muted-foreground">{t("cancel.noOrdersMatch")}</td></tr>
                     ) : queueOrders.map((o) => {
                       const id = o.order_id ?? "—"
                       const factor = o.top_risk_factors?.[0]?.feature?.replace(/^num__|^cat__/, "").replace(/_/g, " ") ?? "—"
@@ -499,13 +520,13 @@ export default function CancellationsPage() {
                             <td className="px-5 py-3"><div className="max-w-[200px] truncate" title={factor}>{factor}</div></td>
                             <td className="px-5 py-3 text-center">
                               <span className={cn("inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold capitalize", riskPill(o.risk_level))}>
-                                {o.risk_level}
+                                {tv(o.risk_level)}
                               </span>
                             </td>
                             <td className="px-5 py-3 text-center font-semibold tabular-nums">{Math.round(o.probability * 100)}%</td>
                             <td className="px-5 py-3 text-right">
                               <button className="rounded-lg bg-secondary px-3 py-1.5 text-xs font-semibold text-secondary-foreground transition-colors hover:bg-secondary/80">
-                                {isOpen ? "Hide" : "Explain"}
+                                {isOpen ? t("cancel.hide") : t("cancel.explain")}
                               </button>
                             </td>
                           </tr>
@@ -514,14 +535,14 @@ export default function CancellationsPage() {
                               <td colSpan={6} className="px-5 py-4">
                                 {explaining === o.order_id ? (
                                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                    <Loader2 className="size-4 animate-spin text-accent" /> Generating Gemini explanation…
+                                    <Loader2 className="size-4 animate-spin text-accent" /> {t("cancel.generatingExplanation")}
                                   </div>
                                 ) : explanations[id] ? (
                                   <div className="space-y-2 text-sm">
-                                    <p className="text-foreground/90">{explanations[id].gemini_explanation ?? "No explanation available."}</p>
+                                    <p className="text-foreground/90">{explanations[id].gemini_explanation ?? t("cancel.noExplanation")}</p>
                                     {explanations[id].recommended_action && (
                                       <p className="rounded-md bg-primary/5 p-2 text-foreground">
-                                        <span className="font-semibold text-primary">Recommended action: </span>
+                                        <span className="font-semibold text-primary">{t("cancel.recommendedAction")}</span>
                                         {explanations[id].recommended_action}
                                       </p>
                                     )}
@@ -535,7 +556,7 @@ export default function CancellationsPage() {
                                     </div>
                                   </div>
                                 ) : (
-                                  <p className="text-sm text-muted-foreground">Could not load explanation.</p>
+                                  <p className="text-sm text-muted-foreground">{t("cancel.couldNotLoad")}</p>
                                 )}
                               </td>
                             </tr>
@@ -555,32 +576,32 @@ export default function CancellationsPage() {
               <div>
                 <div className="mb-1 flex items-center gap-2 text-primary">
                   <Target className="size-5" />
-                  <h2 className="text-sm font-semibold uppercase tracking-wide">Model Performance</h2>
+                  <h2 className="text-sm font-semibold uppercase tracking-wide">{t("cancel.modelPerformance")}</h2>
                 </div>
-                <h3 className="mb-4 text-xs text-muted-foreground">{modelInfo?.algorithm ?? "Not trained"}</h3>
+                <h3 className="mb-4 text-xs text-muted-foreground">{modelInfo?.algorithm ?? t("cancel.notTrained")}</h3>
 
                 {modelReady ? (
                   <div className="space-y-3">
                     <Metric label="ROC-AUC" value={modelInfo?.roc_auc != null ? modelInfo.roc_auc.toFixed(3) : "—"} />
-                    <Metric label="Decision Threshold" value={modelInfo?.threshold != null ? modelInfo.threshold.toFixed(2) : "—"} />
-                    <Metric label="Features" value={modelInfo?.n_features?.toLocaleString() ?? "—"} />
-                    <Metric label="Training Rows" value={modelInfo?.n_training_rows?.toLocaleString() ?? "—"} last />
+                    <Metric label={t("cancel.decisionThreshold")} value={modelInfo?.threshold != null ? modelInfo.threshold.toFixed(2) : "—"} />
+                    <Metric label={t("cancel.features")} value={modelInfo?.n_features?.toLocaleString() ?? "—"} />
+                    <Metric label={t("cancel.trainingRows")} value={modelInfo?.n_training_rows?.toLocaleString() ?? "—"} last />
                   </div>
                 ) : (
                   <p className="text-sm text-muted-foreground">
-                    Run the training script to populate model metrics and enable live predictions.
+                    {t("cancel.runTraining")}
                   </p>
                 )}
               </div>
               <div className="mt-4 rounded-md bg-muted/50 p-3 text-xs leading-relaxed text-muted-foreground">
-                <strong>High recall prioritised</strong> — ops would rather review a false alarm than miss a real cancellation.
-                {modelInfo?.trained_at && <div className="mt-1">Last trained: {modelInfo.trained_at.slice(0, 16).replace("T", " ")}</div>}
+                <strong>{t("cancel.highRecall")}</strong>{t("cancel.highRecallDesc")}
+                {modelInfo?.trained_at && <div className="mt-1">{t("cancel.lastTrained", { date: modelInfo.trained_at.slice(0, 16).replace("T", " ") })}</div>}
               </div>
             </div>
 
             <div className="flex flex-col rounded-xl border border-border bg-card p-6 shadow-sm">
               <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-xl font-bold text-foreground">Cancellation Drivers Report</h2>
+                <h2 className="text-xl font-bold text-foreground">{t("cancel.driversReport")}</h2>
                 {driversReport?.generated_at && (
                   <span className="flex items-center gap-1 text-xs text-muted-foreground">
                     <RefreshCw className="size-3" /> {driversReport.generated_at.slice(0, 10)}
@@ -591,22 +612,22 @@ export default function CancellationsPage() {
               {reportLoading ? (
                 <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
                   <Loader2 className="size-4 animate-spin text-accent" />
-                  Generating the Gemini drivers report from live cancellation data…
+                  {t("cancel.generatingReport")}
                 </div>
               ) : !driversReport ? (
                 <p className="text-sm text-muted-foreground">
-                  The Gemini drivers report is generated on first request. Ensure the backend is running and try refreshing.
+                  {t("cancel.reportFirstRequest")}
                 </p>
               ) : (
                 <div className="space-y-6 text-sm text-muted-foreground">
                   <section>
-                    <h3 className="mb-2 text-sm font-semibold uppercase tracking-wider text-foreground">Executive Summary</h3>
+                    <h3 className="mb-2 text-sm font-semibold uppercase tracking-wider text-foreground">{t("cancel.executiveSummary")}</h3>
                     <p className="leading-relaxed">{driversReport.executive_summary}</p>
                   </section>
 
                   {driversReport.top_drivers?.length > 0 && (
                     <section>
-                      <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-foreground">Top Drivers</h3>
+                      <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-foreground">{t("cancel.topDrivers")}</h3>
                       <ul className="space-y-3">
                         {driversReport.top_drivers.slice(0, 6).map((d, i) => (
                           <li key={i} className="flex gap-3">
@@ -614,7 +635,7 @@ export default function CancellationsPage() {
                             <div>
                               <p className="font-medium text-foreground">{d.name}</p>
                               <p>{d.explanation}</p>
-                              <p className="mt-0.5 text-foreground/80"><span className="font-semibold text-primary">Action: </span>{d.recommendation}</p>
+                              <p className="mt-0.5 text-foreground/80"><span className="font-semibold text-primary">{t("cancel.actionLabel")}</span>{d.recommendation}</p>
                             </div>
                           </li>
                         ))}
@@ -624,7 +645,7 @@ export default function CancellationsPage() {
 
                   {driversReport.high_risk_segments?.length > 0 && (
                     <section>
-                      <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-foreground">High-Risk Segments</h3>
+                      <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-foreground">{t("cancel.highRiskSegments")}</h3>
                       <ul className="grid gap-2 sm:grid-cols-2">
                         {driversReport.high_risk_segments.map((s, i) => (
                           <li key={i} className="rounded-lg border border-border bg-muted/30 p-3">
@@ -655,7 +676,7 @@ export default function CancellationsPage() {
           )}
 
           <footer className="pb-4 pt-2 text-center text-xs text-muted-foreground">
-            Rafeeq Analytics · Cancellation Intelligence
+            {t("cancel.footer")}
           </footer>
         </main>
       </div>

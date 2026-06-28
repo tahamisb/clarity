@@ -5,8 +5,22 @@ import {
   type MessageIntent,
 } from "./mock-messages"
 import type { AgentHelpfulness, CallRecord, Category, CustomerBehavior, Sentiment } from "./rafeeq-data"
+import { rangeParams, type TimeRange } from "./time-range"
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
+
+/**
+ * Build a `?start=…&end=…` suffix for the selected range. "all" yields "" so the
+ * backend returns its full aggregation. Append only to endpoints that have no
+ * other query params (the analytics endpoints below).
+ */
+function rangeSuffix(range: TimeRange): string {
+  const { start, end } = rangeParams(range)
+  const parts: string[] = []
+  if (start) parts.push(`start=${start}`)
+  if (end) parts.push(`end=${end}`)
+  return parts.length ? `?${parts.join("&")}` : ""
+}
 
 async function apiFetch<T>(path: string): Promise<T | null> {
   try {
@@ -15,6 +29,19 @@ async function apiFetch<T>(path: string): Promise<T | null> {
     return (await res.json()) as T
   } catch {
     return null
+  }
+}
+
+/**
+ * Drop the backend's analytics TTL caches so the next fetch re-queries BigQuery.
+ * Called by every page's refresh path (manual button + auto-refresh tick) so a
+ * refresh reflects the latest rows instead of up-to-5-min-stale aggregates.
+ */
+export async function clearServerCache(): Promise<void> {
+  try {
+    await fetch(`${BASE}/api/cache/clear`, { method: "POST", cache: "no-store" })
+  } catch {
+    /* non-fatal — a failed clear just means the fetch may hit a warm cache */
   }
 }
 
@@ -126,6 +153,8 @@ type ApiClassificationResult = {
     zone: string | null
     created_at: string
     ingested_at: string
+    closed_at?: string | null
+    agent_name?: string | null
   }
 }
 
@@ -138,8 +167,8 @@ type ApiSentimentResults = {
 // Data fetchers
 // ---------------------------------------------------------------------------
 
-export async function fetchSentimentTrend(): Promise<TrendItem[] | null> {
-  const data = await apiFetch<ApiSentimentTrend>("/api/v1/analytics/sentiment-trend")
+export async function fetchSentimentTrend(range: TimeRange = "all"): Promise<TrendItem[] | null> {
+  const data = await apiFetch<ApiSentimentTrend>(`/api/v1/analytics/sentiment-trend${rangeSuffix(range)}`)
   if (!data?.weeks?.length) return null
 
   return data.weeks.map((w, i) => ({
@@ -150,8 +179,8 @@ export async function fetchSentimentTrend(): Promise<TrendItem[] | null> {
   }))
 }
 
-export async function fetchTopNegativeTriggers(): Promise<TriggerItem[] | null> {
-  const data = await apiFetch<ApiTopTriggers>("/api/v1/analytics/top-negative-triggers")
+export async function fetchTopNegativeTriggers(range: TimeRange = "all"): Promise<TriggerItem[] | null> {
+  const data = await apiFetch<ApiTopTriggers>(`/api/v1/analytics/top-negative-triggers${rangeSuffix(range)}`)
   if (!data?.triggers?.length) return null
 
   const peakTime = (dist: Record<string, number>) => {
@@ -175,9 +204,12 @@ export async function fetchTopNegativeTriggers(): Promise<TriggerItem[] | null> 
   }))
 }
 
-export async function fetchCrossChannel(): Promise<CrossChannelItem[] | null> {
-  const data = await apiFetch<ApiCrossChannel>("/api/v1/analytics/cross-channel")
-  if (!data?.shared_intents?.length) return null
+export async function fetchCrossChannel(range: TimeRange = "all"): Promise<CrossChannelItem[] | null> {
+  const data = await apiFetch<ApiCrossChannel>(`/api/v1/analytics/cross-channel${rangeSuffix(range)}`)
+  // null → the fetch failed; keep whatever the chart is already showing. An empty
+  // window (no shared intents in range) returns [] so the chart re-scopes to its
+  // empty state instead of silently retaining the previous window's data.
+  if (!data) return null
 
   const intentLabel: Record<string, string> = {
     complaint: "Complaints",
@@ -187,18 +219,19 @@ export async function fetchCrossChannel(): Promise<CrossChannelItem[] | null> {
     praise: "General",
   }
 
-  return data.shared_intents.map((s) => ({
+  return (data.shared_intents ?? []).map((s) => ({
     intent: intentLabel[s.intent] ?? s.intent,
     calls: s.call_count,
     messages: s.text_count,
   }))
 }
 
-export async function fetchZoneHeatmap(): Promise<ZoneItem[] | null> {
-  const data = await apiFetch<ApiZoneHeatmap>("/api/v1/analytics/zone-heatmap")
-  if (!data?.zones?.length) return null
+export async function fetchZoneHeatmap(range: TimeRange = "all"): Promise<ZoneItem[] | null> {
+  const data = await apiFetch<ApiZoneHeatmap>(`/api/v1/analytics/zone-heatmap${rangeSuffix(range)}`)
+  // See fetchCrossChannel: null = fetch error (keep stale), [] = empty window (re-scope).
+  if (!data) return null
 
-  return data.zones.map((z) => ({
+  return (data.zones ?? []).map((z) => ({
     zone: z.zone,
     negativePct: Math.round(z.negative_pct),
   }))
@@ -259,10 +292,25 @@ export async function fetchMessages(): Promise<SupportMessage[] | null> {
     return "Night"
   }
 
+  // Backend emits timestamps as "YYYY-MM-DD HH:MM:SS+00" — normalise to ISO so
+  // Date() parses them reliably (space→T, bare "+00" → "+00:00").
+  const parseTs = (s?: string | null): number => {
+    if (!s) return NaN
+    const iso = s.trim().replace(" ", "T").replace(/([+-]\d{2})$/, "$1:00")
+    return new Date(iso).getTime()
+  }
+
   return data.items
     .map((item) => {
       const { classification: clf, message: msg } = item
       const intent = intentMap[clf.intent] ?? "Complaint"
+      const createdRaw = msg.created_at || clf.classified_at
+      const createdTs = parseTs(createdRaw)
+      const closedTs = parseTs(msg.closed_at)
+      const handlingMinutes =
+        Number.isNaN(createdTs) || Number.isNaN(closedTs)
+          ? undefined
+          : Math.max(0, Math.round((closedTs - createdTs) / 60000))
       return {
         id: `MSG-${clf.message_id.slice(0, 8).toUpperCase()}`,
         channel: channelMap[msg.source_channel] ?? "App",
@@ -272,11 +320,15 @@ export async function fetchMessages(): Promise<SupportMessage[] | null> {
         sentiment: sentimentMap[clf.sentiment] ?? "Neutral",
         confidence: Math.round(clf.sentiment_confidence * 100),
         zone: msg.zone ?? "Unknown",
-        timeOfDay: toTimeOfDay(msg.created_at || clf.classified_at),
-        date: (msg.created_at || clf.classified_at).replace("T", " ").slice(0, 16),
+        timeOfDay: toTimeOfDay(createdRaw),
+        date: createdRaw.replace("T", " ").slice(0, 16),
         merchant: msg.merchant_name ?? undefined,
         suggestedReply: replyMap[intent] ?? "",
-        resolved: clf.sentiment !== "negative",
+        // A chat is "resolved" once it has been closed (has a closed_at).
+        resolved: !!msg.closed_at,
+        closedAt: msg.closed_at ? msg.closed_at.replace("T", " ").slice(0, 16) : undefined,
+        handlingMinutes,
+        agentName: msg.agent_name ?? undefined,
       } satisfies SupportMessage
     })
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
@@ -286,13 +338,16 @@ export async function fetchMessages(): Promise<SupportMessage[] | null> {
 // Fetch everything in parallel — returns real data or null per field
 // ---------------------------------------------------------------------------
 
-export async function fetchAllMessagesData() {
+export async function fetchAllMessagesData(range: TimeRange = "all") {
+  // The raw message feed is fetched in full and filtered client-side (so the
+  // table/stat cards re-scope instantly on toggle); the pre-aggregated panels
+  // are re-queried server-side for the selected window.
   const [messages, triggers, crossChannel, trend, zones] = await Promise.all([
     fetchMessages(),
-    fetchTopNegativeTriggers(),
-    fetchCrossChannel(),
-    fetchSentimentTrend(),
-    fetchZoneHeatmap(),
+    fetchTopNegativeTriggers(range),
+    fetchCrossChannel(range),
+    fetchSentimentTrend(range),
+    fetchZoneHeatmap(range),
   ])
   return { messages, triggers, crossChannel, trend, zones }
 }
@@ -519,22 +574,24 @@ export type DriversReport = {
   generated_at: string
 }
 
-export const fetchCancelTrend = () =>
-  apiFetch<CancelTrend>("/api/cancellation/analytics/trend")
-export const fetchCancelByMerchant = () =>
-  apiFetch<CancelByMerchant>("/api/cancellation/analytics/by-merchant")
-export const fetchCancelByZone = () =>
-  apiFetch<CancelByZone>("/api/cancellation/analytics/by-zone")
-export const fetchCancelByTime = () =>
-  apiFetch<TimeCancelRow[]>("/api/cancellation/analytics/by-time")
-export const fetchCancelByDay = () =>
-  apiFetch<DowCancelRow[]>("/api/cancellation/analytics/by-day")
-export const fetchCancelByOrderSize = () =>
-  apiFetch<OrderSizeRow[]>("/api/cancellation/analytics/by-order-size")
-export const fetchCancelByActor = () =>
-  apiFetch<ActorRow[]>("/api/cancellation/analytics/by-actor")
-export const fetchCancelCrosstabs = () =>
-  apiFetch<CancelCrosstabs>("/api/cancellation/analytics/crosstabs")
+// Cancellation analytics are pre-aggregated server-side, so the range is sent to
+// the backend (which re-aggregates over the window) rather than filtered locally.
+export const fetchCancelTrend = (range: TimeRange = "all") =>
+  apiFetch<CancelTrend>(`/api/cancellation/analytics/trend${rangeSuffix(range)}`)
+export const fetchCancelByMerchant = (range: TimeRange = "all") =>
+  apiFetch<CancelByMerchant>(`/api/cancellation/analytics/by-merchant${rangeSuffix(range)}`)
+export const fetchCancelByZone = (range: TimeRange = "all") =>
+  apiFetch<CancelByZone>(`/api/cancellation/analytics/by-zone${rangeSuffix(range)}`)
+export const fetchCancelByTime = (range: TimeRange = "all") =>
+  apiFetch<TimeCancelRow[]>(`/api/cancellation/analytics/by-time${rangeSuffix(range)}`)
+export const fetchCancelByDay = (range: TimeRange = "all") =>
+  apiFetch<DowCancelRow[]>(`/api/cancellation/analytics/by-day${rangeSuffix(range)}`)
+export const fetchCancelByOrderSize = (range: TimeRange = "all") =>
+  apiFetch<OrderSizeRow[]>(`/api/cancellation/analytics/by-order-size${rangeSuffix(range)}`)
+export const fetchCancelByActor = (range: TimeRange = "all") =>
+  apiFetch<ActorRow[]>(`/api/cancellation/analytics/by-actor${rangeSuffix(range)}`)
+export const fetchCancelCrosstabs = (range: TimeRange = "all") =>
+  apiFetch<CancelCrosstabs>(`/api/cancellation/analytics/crosstabs${rangeSuffix(range)}`)
 export const fetchDriversReport = () =>
   apiFetch<DriversReport>("/api/cancellation/analytics/drivers-report")
 export const fetchFeatureImportance = () =>
@@ -553,17 +610,19 @@ export const askCancellationChat = (question: string) =>
 // Fast dashboard data. The Gemini drivers report is intentionally NOT here —
 // it's slow to generate, so the page fetches it separately (see fetchDriversReport)
 // and fills it in after the charts have already painted.
-export async function fetchAllCancellationData() {
+export async function fetchAllCancellationData(range: TimeRange = "all") {
+  // Analytics aggregates respect the selected window; model artifacts
+  // (feature importance, model info) and the live queue are time-independent.
   const [trend, byMerchant, byZone, byTime, byDay, byOrderSize, byActor, crosstabs,
     featureImportance, modelInfo, liveQueue] = await Promise.all([
-    fetchCancelTrend(),
-    fetchCancelByMerchant(),
-    fetchCancelByZone(),
-    fetchCancelByTime(),
-    fetchCancelByDay(),
-    fetchCancelByOrderSize(),
-    fetchCancelByActor(),
-    fetchCancelCrosstabs(),
+    fetchCancelTrend(range),
+    fetchCancelByMerchant(range),
+    fetchCancelByZone(range),
+    fetchCancelByTime(range),
+    fetchCancelByDay(range),
+    fetchCancelByOrderSize(range),
+    fetchCancelByActor(range),
+    fetchCancelCrosstabs(range),
     fetchFeatureImportance(),
     fetchModelInfo(),
     fetchLiveQueue(),

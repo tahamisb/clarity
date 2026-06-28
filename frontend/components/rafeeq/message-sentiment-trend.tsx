@@ -12,6 +12,7 @@ import {
 } from "recharts"
 import type { TrendItem } from "@/lib/api"
 import { Panel } from "./panel"
+import { useT, useTV } from "@/lib/i18n"
 
 function Legend({ color, label }: { color: string; label: string }) {
   return (
@@ -23,29 +24,31 @@ function Legend({ color, label }: { color: string; label: string }) {
 }
 
 export function MessageSentimentTrend({ data }: { data?: TrendItem[] }) {
+  const t = useT()
+  const tv = useTV()
   const [mounted, setMounted] = useState(false)
   useEffect(() => setMounted(true), [])
 
   const legends = (
     <div className="flex items-center gap-3 text-[11px]">
-      <Legend color="var(--positive)" label="Positive" />
-      <Legend color="var(--neutral)" label="Neutral" />
-      <Legend color="var(--negative)" label="Negative" />
+      <Legend color="var(--positive)" label={tv("Positive")} />
+      <Legend color="var(--neutral)" label={tv("Neutral")} />
+      <Legend color="var(--negative)" label={tv("Negative")} />
     </div>
   )
 
   if (!data?.length) {
     return (
-      <Panel title="Message Sentiment Trend by Week" action={legends}>
+      <Panel title={t("mst.title")} action={legends}>
         <p className="text-sm text-muted-foreground">
-          No sentiment trend data yet — run sentiment classification to populate this chart.
+          {t("mst.empty")}
         </p>
       </Panel>
     )
   }
 
   return (
-    <Panel title="Message Sentiment Trend by Week" action={legends}>
+    <Panel title={t("mst.title")} action={legends}>
       {mounted ? (
         <ResponsiveContainer width="100%" height={240}>
           <AreaChart data={data} margin={{ left: -16, right: 8, top: 8 }}>

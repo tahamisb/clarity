@@ -101,6 +101,26 @@ def extract_json(text: str) -> dict:
                 continue
     raise json.JSONDecodeError("No parseable JSON object found", text, 0)
 
+# Closers that are not human agents — these mean the chat was handled entirely by
+# the bot or closed by the customer/system (i.e. no bot→agent handover).
+_NON_AGENT_CLOSERS = {"cron", "customer", "bot", "system", "agent"}
+
+
+def derive_agent_name(closed_by: str | None) -> str | None:
+    """The human agent who handled/closed a chat, or None when bot/customer-closed.
+
+    chat_history.closed_by holds the closer's name for agent-handled chats
+    (e.g. "Fatima Ezzahra") and a system keyword otherwise. A non-null result
+    marks a bot→agent handover.
+    """
+    if not closed_by:
+        return None
+    name = str(closed_by).strip()
+    if not name or name.lower() in _NON_AGENT_CLOSERS:
+        return None
+    return name
+
+
 def derive_channel(type_field: str | None, device_id: str | None) -> str:
     type_field = (type_field or "").lower()
     if "whatsapp" in type_field:

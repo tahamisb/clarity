@@ -24,8 +24,8 @@ _CALL_TO_TEXT_INTENT = {
 }
 
 
-async def get_sentiment_trend() -> SentimentTrendResponse:
-    rows = await bq.query_sentiment_trend()
+async def get_sentiment_trend(start: Optional[str] = None, end: Optional[str] = None) -> SentimentTrendResponse:
+    rows = await bq.query_sentiment_trend(start, end)
     buckets: dict[str, dict[str, int]] = defaultdict(lambda: {"positive": 0, "neutral": 0, "negative": 0})
     for r in rows:
         s = r["sentiment"]
@@ -47,9 +47,12 @@ async def get_sentiment_trend() -> SentimentTrendResponse:
 
 
 async def get_top_negative_triggers(
-    merchant: Optional[str] = None, zone: Optional[str] = None, time_of_day: Optional[str] = None
+    merchant: Optional[str] = None, zone: Optional[str] = None, time_of_day: Optional[str] = None,
+    start: Optional[str] = None, end: Optional[str] = None,
 ) -> TopTriggersResponse:
-    rows = await bq.query_top_triggers(merchant=merchant, zone=zone, time_of_day=time_of_day)
+    rows = await bq.query_top_triggers(
+        merchant=merchant, zone=zone, time_of_day=time_of_day, start=start, end=end
+    )
     triggers = [
         NegativeTrigger(
             trigger=r["trigger"], count=int(r["cnt"]),
@@ -70,8 +73,8 @@ async def get_top_negative_triggers(
     )
 
 
-async def get_cross_channel() -> CrossChannelResponse:
-    data = await bq.query_cross_channel_data()
+async def get_cross_channel(start: Optional[str] = None, end: Optional[str] = None) -> CrossChannelResponse:
+    data = await bq.query_cross_channel_data(start, end)
 
     def _summary(d: dict) -> ChannelSentimentSummary:
         total = d.get("total", 0)
@@ -101,8 +104,8 @@ async def get_cross_channel() -> CrossChannelResponse:
     )
 
 
-async def get_intent_distribution() -> IntentDistributionResponse:
-    rows = await bq.query_intent_distribution()
+async def get_intent_distribution(start: Optional[str] = None, end: Optional[str] = None) -> IntentDistributionResponse:
+    rows = await bq.query_intent_distribution(start, end)
     total = sum(int(r["cnt"]) for r in rows)
     return IntentDistributionResponse(total=total, intents=[
         IntentRow(intent=r["intent"], count=int(r["cnt"]),
@@ -111,8 +114,8 @@ async def get_intent_distribution() -> IntentDistributionResponse:
     ])
 
 
-async def get_merchant_sentiment() -> MerchantSentimentResponse:
-    rows = await bq.query_merchant_sentiment()
+async def get_merchant_sentiment(start: Optional[str] = None, end: Optional[str] = None) -> MerchantSentimentResponse:
+    rows = await bq.query_merchant_sentiment(start, end)
     merchants = []
     for r in rows:
         total, neg = int(r["total"]), int(r["negative"])
@@ -124,8 +127,8 @@ async def get_merchant_sentiment() -> MerchantSentimentResponse:
     return MerchantSentimentResponse(merchants=merchants)
 
 
-async def get_zone_heatmap() -> ZoneHeatmapResponse:
-    rows = await bq.query_zone_heatmap()
+async def get_zone_heatmap(start: Optional[str] = None, end: Optional[str] = None) -> ZoneHeatmapResponse:
+    rows = await bq.query_zone_heatmap(start, end)
     zones = []
     for r in rows:
         total, neg = int(r["total"]), int(r["negative"])

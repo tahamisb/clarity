@@ -72,6 +72,8 @@ class MessageResponse(BaseModel):
     zone: Optional[str]
     created_at: str
     ingested_at: str
+    closed_at: Optional[str] = None
+    agent_name: Optional[str] = None
     classification: Optional[TextClassificationResponse] = None
 
 

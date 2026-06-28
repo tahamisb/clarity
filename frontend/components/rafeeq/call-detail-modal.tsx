@@ -9,6 +9,7 @@ import {
   SENTIMENT_COLORS,
   formatDuration,
 } from "@/lib/rafeeq-data"
+import { useT, useTV } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 
 export function CallDetailModal({
@@ -18,6 +19,8 @@ export function CallDetailModal({
   call: CallRecord
   onClose: () => void
 }) {
+  const t = useT()
+  const tv = useTV()
   const [tab, setTab] = useState<"transcript" | "analysis">("transcript")
 
   return (
@@ -43,7 +46,7 @@ export function CallDetailModal({
           <button
             onClick={onClose}
             className="flex size-8 items-center justify-center rounded-lg border border-border text-muted-foreground hover:text-foreground"
-            aria-label="Close"
+            aria-label={t("a11y.close")}
           >
             <X className="size-4" />
           </button>
@@ -51,18 +54,18 @@ export function CallDetailModal({
 
         {/* tabs */}
         <div className="flex gap-1 border-b border-border px-5">
-          {(["transcript", "analysis"] as const).map((t) => (
+          {(["transcript", "analysis"] as const).map((tabKey) => (
             <button
-              key={t}
-              onClick={() => setTab(t)}
+              key={tabKey}
+              onClick={() => setTab(tabKey)}
               className={cn(
-                "border-b-2 px-3 py-2.5 text-sm font-medium capitalize transition-colors",
-                tab === t
+                "border-b-2 px-3 py-2.5 text-sm font-medium transition-colors",
+                tab === tabKey
                   ? "border-accent text-foreground"
                   : "border-transparent text-muted-foreground hover:text-foreground",
               )}
             >
-              {t}
+              {t(`cdm.${tabKey}`)}
             </button>
           ))}
         </div>
@@ -72,25 +75,25 @@ export function CallDetailModal({
           {tab === "transcript" ? (
             <div className="space-y-3 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
               {call.transcript || (
-                <p className="text-muted-foreground">No transcript available.</p>
+                <p className="text-muted-foreground">{t("cdm.noTranscript")}</p>
               )}
             </div>
           ) : (
             <div className="space-y-4 text-sm">
-              <Field label="Detected Category">
+              <Field label={t("cdm.detectedCategory")}>
                 <span className="font-semibold text-foreground">
-                  {call.category}
+                  {tv(call.category)}
                 </span>
                 <span className="ml-2 text-muted-foreground">
-                  {call.confidence}% confidence
+                  {t("cdm.confidenceSuffix", { n: call.confidence })}
                 </span>
               </Field>
-              <Field label="Detected Intent">
+              <Field label={t("cdm.detectedIntent")}>
                 <span className="font-semibold text-foreground">
-                  {call.intent}
+                  {tv(call.intent)}
                 </span>
               </Field>
-              <Field label="Overall Sentiment">
+              <Field label={t("cdm.overallSentiment")}>
                 <span
                   className="rounded-full px-2 py-0.5 text-xs font-semibold"
                   style={{
@@ -98,10 +101,10 @@ export function CallDetailModal({
                     color: SENTIMENT_COLORS[call.sentiment],
                   }}
                 >
-                  {call.sentiment}
+                  {tv(call.sentiment)}
                 </span>
               </Field>
-              <Field label="Agent Helpfulness">
+              <Field label={t("col.helpfulness")}>
                 <span
                   className="rounded-full px-2 py-0.5 text-xs font-semibold"
                   style={{
@@ -109,10 +112,10 @@ export function CallDetailModal({
                     color: HELPFULNESS_COLORS[call.agentHelpfulness],
                   }}
                 >
-                  {call.agentHelpfulness}
+                  {tv(call.agentHelpfulness)}
                 </span>
               </Field>
-              <Field label="Customer Mood">
+              <Field label={t("col.customerMood")}>
                 <span
                   className="rounded-full px-2 py-0.5 text-xs font-semibold"
                   style={{
@@ -120,12 +123,12 @@ export function CallDetailModal({
                     color: CUSTOMER_BEHAVIOR_COLORS[call.customerBehavior],
                   }}
                 >
-                  {call.customerBehavior}
+                  {tv(call.customerBehavior)}
                 </span>
               </Field>
-              <Field label="Summary">
+              <Field label={t("cdm.summary")}>
                 <p className="leading-relaxed text-muted-foreground">
-                  {call.summary || "No summary available."}
+                  {call.summary || t("cdm.noSummary")}
                 </p>
               </Field>
             </div>
@@ -136,11 +139,11 @@ export function CallDetailModal({
         <div className="flex items-center justify-end gap-2 border-t border-border p-4">
           <button className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground">
             <Flag className="size-4" />
-            Flag for Review
+            {t("cdm.flagForReview")}
           </button>
           <button className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-bold text-primary-foreground hover:bg-accent">
             <Download className="size-4" />
-            Download Transcript
+            {t("cdm.downloadTranscript")}
           </button>
         </div>
       </div>

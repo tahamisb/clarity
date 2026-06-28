@@ -28,6 +28,10 @@ _MESSAGES_SCHEMA = [
     bigquery.SchemaField("zone", "STRING"),
     bigquery.SchemaField("created_at", "TIMESTAMP"),
     bigquery.SchemaField("ingested_at", "TIMESTAMP"),
+    # Conversation END time. Handling/SLA time is closed_at - created_at.
+    bigquery.SchemaField("closed_at", "TIMESTAMP"),
+    # Human agent who handled/closed the chat (NULL ⇒ bot/customer-only, no handover).
+    bigquery.SchemaField("agent_name", "STRING"),
 ]
 
 _CLASSIFICATIONS_SCHEMA = [
@@ -308,7 +312,9 @@ def _query_classifications_sync(
                CAST(c.classified_at AS STRING) AS classified_at,
                m.content, m.source_channel, m.merchant_name, m.zone, m.customer_id,
                CAST(m.created_at AS STRING) AS msg_created_at,
-               CAST(m.ingested_at AS STRING) AS msg_ingested_at
+               CAST(m.ingested_at AS STRING) AS msg_ingested_at,
+               CAST(m.closed_at AS STRING) AS msg_closed_at,
+               m.agent_name AS agent_name
         {join} ORDER BY c.classified_at DESC
         LIMIT @page_size OFFSET @offset
     """, job_config=bigquery.QueryJobConfig(query_parameters=data_params)).result()]
@@ -332,26 +338,53 @@ async def query_classifications(
 # Analytics queries
 # ---------------------------------------------------------------------------
 
-def _sentiment_trend_sync() -> list[dict]:
+# Optional [start, end] date window (YYYY-MM-DD) applied to the analytics
+# queries. Text rows are dated by m.created_at; call rows by analysed_at.
+def _date_params(start: Optional[str], end: Optional[str]) -> list:
+    params: list = []
+    if start:
+        params.append(bigquery.ScalarQueryParameter("start_date", "DATE", start))
+    if end:
+        params.append(bigquery.ScalarQueryParameter("end_date", "DATE", end))
+    return params
+
+
+def _date_clauses(col: str, start: Optional[str], end: Optional[str]) -> list[str]:
+    clauses: list[str] = []
+    if start:
+        clauses.append(f"DATE({col}) >= @start_date")
+    if end:
+        clauses.append(f"DATE({col}) <= @end_date")
+    return clauses
+
+
+def _sentiment_trend_sync(start: Optional[str] = None, end: Optional[str] = None) -> list[dict]:
+    where = " AND ".join(["m.created_at IS NOT NULL", *_date_clauses("m.created_at", start, end)])
     sql = f"""
         SELECT FORMAT_TIMESTAMP('%Y-%m-%d', DATE_TRUNC(m.created_at, WEEK(MONDAY))) AS week_start,
                c.sentiment, COUNT(*) AS cnt
         FROM `{_ref('classifications')}` c
         JOIN `{_ref('messages')}` m ON c.message_id = m.message_id
-        WHERE m.created_at IS NOT NULL
+        WHERE {where}
         GROUP BY 1, 2 ORDER BY 1
     """
-    return [dict(r) for r in get_client().query(sql).result()]
+    return [dict(r) for r in get_client().query(
+        sql, job_config=bigquery.QueryJobConfig(query_parameters=_date_params(start, end))
+    ).result()]
 
 
-async def query_sentiment_trend() -> list[dict]:
+async def query_sentiment_trend(start: Optional[str] = None, end: Optional[str] = None) -> list[dict]:
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, _sentiment_trend_sync)
+    return await loop.run_in_executor(None, _sentiment_trend_sync, start, end)
 
 
-def _top_triggers_sync(merchant: Optional[str], zone: Optional[str], time_of_day: Optional[str]) -> list[dict]:
+def _top_triggers_sync(
+    merchant: Optional[str], zone: Optional[str], time_of_day: Optional[str],
+    start: Optional[str] = None, end: Optional[str] = None,
+) -> list[dict]:
     conditions = ["c.sentiment = 'negative'", "c.negative_trigger IS NOT NULL"]
-    params: list = []
+    params: list = _date_params(start, end)
+    conditions += _date_clauses("m.created_at", start, end)
 
     if merchant:
         conditions.append("m.merchant_name = @merchant")
@@ -391,49 +424,71 @@ def _top_triggers_sync(merchant: Optional[str], zone: Optional[str], time_of_day
 
 
 async def query_top_triggers(
-    merchant: Optional[str] = None, zone: Optional[str] = None, time_of_day: Optional[str] = None
+    merchant: Optional[str] = None, zone: Optional[str] = None, time_of_day: Optional[str] = None,
+    start: Optional[str] = None, end: Optional[str] = None,
 ) -> list[dict]:
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, _top_triggers_sync, merchant, zone, time_of_day)
+    return await loop.run_in_executor(None, _top_triggers_sync, merchant, zone, time_of_day, start, end)
 
 
-def _text_sentiment_summary_sync() -> dict:
-    rows = {r["sentiment"]: int(r["cnt"]) for r in get_client().query(
-        f"SELECT sentiment, COUNT(*) AS cnt FROM `{_ref('classifications')}` GROUP BY 1"
-    ).result()}
+def _run_params(sql: str, params: list) -> list[dict]:
+    return [dict(r) for r in get_client().query(
+        sql, job_config=bigquery.QueryJobConfig(query_parameters=params)
+    ).result()]
+
+
+def _text_sentiment_summary_sync(start: Optional[str] = None, end: Optional[str] = None) -> dict:
+    where = _date_clauses("m.created_at", start, end)
+    where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+    rows = {r["sentiment"]: int(r["cnt"]) for r in _run_params(f"""
+        SELECT c.sentiment AS sentiment, COUNT(*) AS cnt
+        FROM `{_ref('classifications')}` c
+        JOIN `{_ref('messages')}` m ON c.message_id = m.message_id
+        {where_sql} GROUP BY 1
+    """, _date_params(start, end))}
     return {"total": sum(rows.values()), **rows}
 
 
-def _text_intent_counts_sync() -> dict:
-    return {r["intent"]: int(r["cnt"]) for r in get_client().query(
-        f"SELECT intent, COUNT(*) AS cnt FROM `{_ref('classifications')}` GROUP BY 1"
-    ).result()}
+def _text_intent_counts_sync(start: Optional[str] = None, end: Optional[str] = None) -> dict:
+    where = _date_clauses("m.created_at", start, end)
+    where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+    return {r["intent"]: int(r["cnt"]) for r in _run_params(f"""
+        SELECT c.intent AS intent, COUNT(*) AS cnt
+        FROM `{_ref('classifications')}` c
+        JOIN `{_ref('messages')}` m ON c.message_id = m.message_id
+        {where_sql} GROUP BY 1
+    """, _date_params(start, end))}
 
 
-def _call_sentiment_summary_sync() -> dict:
+def _call_sentiment_summary_sync(start: Optional[str] = None, end: Optional[str] = None) -> dict:
     s = get_settings()
-    rows = {r["sentiment"]: int(r["cnt"]) for r in get_client().query(
-        f"SELECT sentiment, COUNT(*) AS cnt FROM `{s.gcp_project_id}.{s.bq_calls_dataset}.call_analysis` GROUP BY 1"
-    ).result()}
+    where = _date_clauses("analysed_at", start, end)
+    where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+    rows = {r["sentiment"]: int(r["cnt"]) for r in _run_params(
+        f"SELECT sentiment, COUNT(*) AS cnt "
+        f"FROM `{s.gcp_project_id}.{s.bq_calls_dataset}.call_analysis` {where_sql} GROUP BY 1",
+        _date_params(start, end),
+    )}
     return {"total": sum(rows.values()), **rows}
 
 
-def _call_intent_counts_sync() -> dict:
+def _call_intent_counts_sync(start: Optional[str] = None, end: Optional[str] = None) -> dict:
     s = get_settings()
-    return {r["intent"]: int(r["cnt"]) for r in get_client().query(f"""
+    conditions = ["primary_intent IS NOT NULL", *_date_clauses("analysed_at", start, end)]
+    return {r["intent"]: int(r["cnt"]) for r in _run_params(f"""
         SELECT primary_intent AS intent, COUNT(*) AS cnt
         FROM `{s.gcp_project_id}.{s.bq_calls_dataset}.call_analysis`
-        WHERE primary_intent IS NOT NULL GROUP BY 1
-    """).result()}
+        WHERE {" AND ".join(conditions)} GROUP BY 1
+    """, _date_params(start, end))}
 
 
-async def query_cross_channel_data() -> dict:
+async def query_cross_channel_data(start: Optional[str] = None, end: Optional[str] = None) -> dict:
     loop = asyncio.get_running_loop()
     results = await asyncio.gather(
-        loop.run_in_executor(None, _text_sentiment_summary_sync),
-        loop.run_in_executor(None, _text_intent_counts_sync),
-        loop.run_in_executor(None, _call_sentiment_summary_sync),
-        loop.run_in_executor(None, _call_intent_counts_sync),
+        loop.run_in_executor(None, _text_sentiment_summary_sync, start, end),
+        loop.run_in_executor(None, _text_intent_counts_sync, start, end),
+        loop.run_in_executor(None, _call_sentiment_summary_sync, start, end),
+        loop.run_in_executor(None, _call_intent_counts_sync, start, end),
     )
     return {
         "text_sentiment": results[0], "text_intents": results[1],
@@ -441,36 +496,55 @@ async def query_cross_channel_data() -> dict:
     }
 
 
-async def query_intent_distribution() -> list[dict]:
-    loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, lambda: [dict(r) for r in get_client().query(
-        f"SELECT intent, COUNT(*) AS cnt FROM `{_ref('classifications')}` GROUP BY 1 ORDER BY cnt DESC"
-    ).result()])
+def _intent_distribution_sync(start: Optional[str] = None, end: Optional[str] = None) -> list[dict]:
+    where = _date_clauses("m.created_at", start, end)
+    where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+    return _run_params(f"""
+        SELECT c.intent AS intent, COUNT(*) AS cnt
+        FROM `{_ref('classifications')}` c
+        JOIN `{_ref('messages')}` m ON c.message_id = m.message_id
+        {where_sql} GROUP BY 1 ORDER BY cnt DESC
+    """, _date_params(start, end))
 
 
-async def query_merchant_sentiment() -> list[dict]:
+async def query_intent_distribution(start: Optional[str] = None, end: Optional[str] = None) -> list[dict]:
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, lambda: [dict(r) for r in get_client().query(f"""
+    return await loop.run_in_executor(None, _intent_distribution_sync, start, end)
+
+
+def _merchant_sentiment_sync(start: Optional[str] = None, end: Optional[str] = None) -> list[dict]:
+    conditions = ["m.merchant_name IS NOT NULL", *_date_clauses("m.created_at", start, end)]
+    return _run_params(f"""
         SELECT m.merchant_name, COUNT(*) AS total,
                COUNTIF(c.sentiment = 'positive') AS positive,
                COUNTIF(c.sentiment = 'neutral') AS neutral,
                COUNTIF(c.sentiment = 'negative') AS negative
         FROM `{_ref('classifications')}` c
         JOIN `{_ref('messages')}` m ON c.message_id = m.message_id
-        WHERE m.merchant_name IS NOT NULL
+        WHERE {" AND ".join(conditions)}
         GROUP BY 1 ORDER BY total DESC
-    """).result()])
+    """, _date_params(start, end))
 
 
-async def query_zone_heatmap() -> list[dict]:
+async def query_merchant_sentiment(start: Optional[str] = None, end: Optional[str] = None) -> list[dict]:
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, lambda: [dict(r) for r in get_client().query(f"""
+    return await loop.run_in_executor(None, _merchant_sentiment_sync, start, end)
+
+
+def _zone_heatmap_sync(start: Optional[str] = None, end: Optional[str] = None) -> list[dict]:
+    conditions = ["m.zone IS NOT NULL", *_date_clauses("m.created_at", start, end)]
+    return _run_params(f"""
         SELECT m.zone, COUNT(*) AS total, COUNTIF(c.sentiment = 'negative') AS negative
         FROM `{_ref('classifications')}` c
         JOIN `{_ref('messages')}` m ON c.message_id = m.message_id
-        WHERE m.zone IS NOT NULL
+        WHERE {" AND ".join(conditions)}
         GROUP BY 1 ORDER BY negative DESC
-    """).result()])
+    """, _date_params(start, end))
+
+
+async def query_zone_heatmap(start: Optional[str] = None, end: Optional[str] = None) -> list[dict]:
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, _zone_heatmap_sync, start, end)
 
 
 async def query_accuracy_rows() -> list[dict]:

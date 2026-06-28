@@ -14,6 +14,7 @@ import {
 import type { CrossChannelItem } from "@/lib/api"
 import { Panel } from "./panel"
 import { Lightbulb } from "lucide-react"
+import { useT } from "@/lib/i18n"
 
 // Find the intent with the biggest skew between channels and describe it.
 function buildInsight(data: CrossChannelItem[]): string | null {
@@ -58,14 +59,15 @@ function buildInsight(data: CrossChannelItem[]): string | null {
 }
 
 export function CrossChannelComparison({ data }: { data?: CrossChannelItem[] }) {
+  const t = useT()
   const [mounted, setMounted] = useState(false)
   useEffect(() => setMounted(true), [])
 
   if (!data?.length) {
     return (
-      <Panel title="Cross-Channel Comparison: Calls vs Messages">
+      <Panel title={t("ccc.title")}>
         <p className="text-sm text-muted-foreground">
-          No cross-channel data yet — run sentiment classification to populate this chart.
+          {t("ccc.empty")}
         </p>
       </Panel>
     )
@@ -74,7 +76,7 @@ export function CrossChannelComparison({ data }: { data?: CrossChannelItem[] }) 
   const insight = buildInsight(data)
 
   return (
-    <Panel title="Cross-Channel Comparison: Calls vs Messages">
+    <Panel title={t("ccc.title")}>
       <div className="flex flex-col gap-4">
         {mounted ? (
           <div className="h-[280px]">
@@ -107,8 +109,8 @@ export function CrossChannelComparison({ data }: { data?: CrossChannelItem[] }) 
                   wrapperStyle={{ fontSize: 12, color: "var(--muted-foreground)" }}
                   iconType="circle"
                 />
-                <Bar dataKey="calls" name="Calls Volume" fill="var(--chart-5)" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="messages" name="Messages Volume" fill="var(--chart-1)" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="calls" name={t("ccc.callsVolume")} fill="var(--chart-5)" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="messages" name={t("ccc.messagesVolume")} fill="var(--chart-1)" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -122,7 +124,7 @@ export function CrossChannelComparison({ data }: { data?: CrossChannelItem[] }) 
               <Lightbulb className="size-4" />
             </div>
             <div>
-              <h4 className="text-sm font-semibold text-foreground">AI Insight</h4>
+              <h4 className="text-sm font-semibold text-foreground">{t("common.aiInsight")}</h4>
               <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{insight}</p>
             </div>
           </div>

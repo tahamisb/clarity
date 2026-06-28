@@ -23,6 +23,8 @@ def _fetch_unprocessed_chats_sync(limit: int) -> list[dict]:
             ch.locale,
             ch.messages,
             ch.created_at,
+            ch.closed_at,
+            ch.closed_by,
             vk.customer_zone AS zone,
             vk.restaurant_name AS merchant_name
         FROM `{s.gcp_project_id}.reports.chat_history` ch

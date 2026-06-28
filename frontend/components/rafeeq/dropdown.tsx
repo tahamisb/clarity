@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import { ChevronDown, Check } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useTV } from "@/lib/i18n"
 
 export function Dropdown({
   label,
@@ -15,6 +16,7 @@ export function Dropdown({
   options: string[]
   onChange: (value: string | null) => void
 }) {
+  const tv = useTV()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
@@ -41,7 +43,7 @@ export function Dropdown({
             : "border-border bg-secondary/60 text-foreground hover:border-accent/50",
         )}
       >
-        {active ? value : label}
+        {active ? tv(value) : label}
         <ChevronDown
           className={cn(
             "size-3.5 transition-transform",
@@ -72,7 +74,7 @@ export function Dropdown({
               }}
               className="flex w-full items-center justify-between px-3 py-1.5 text-left text-xs text-foreground transition-colors hover:bg-secondary"
             >
-              {opt}
+              {tv(opt)}
               {value === opt && <Check className="size-3.5 text-accent" />}
             </button>
           ))}

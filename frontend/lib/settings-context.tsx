@@ -29,6 +29,13 @@ export type AppSettings = {
   slackAlerts: boolean
   emailAlerts: boolean
 
+  // In-app notification toggles (surfaced in the top-bar notification panel).
+  // SLA-breach notifications fire strictly off the chat/general SLA targets
+  // above; high-risk uses the confidence cutoff; helpfulness is manager-only.
+  notifySlaBreaches: boolean
+  notifyHighRiskCancellations: boolean
+  notifyAgentHelpfulness: boolean
+
   // ML tuning
   confidencePct: number
 
@@ -44,6 +51,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   sentimentSpikePct: 15,
   slackAlerts: true,
   emailAlerts: false,
+  notifySlaBreaches: true,
+  notifyHighRiskCancellations: true,
+  notifyAgentHelpfulness: true,
   confidencePct: 65,
   language: "en",
 }
@@ -102,6 +112,15 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       /* storage may be unavailable (private mode) — non-fatal */
     }
   }, [settings, hydrated])
+
+  // Reflect the chosen language onto the document: Arabic flips the entire app
+  // to right-to-left and sets <html lang="ar">, so layout, text alignment and
+  // logical spacing mirror automatically across every page.
+  useEffect(() => {
+    const root = document.documentElement
+    root.lang = settings.language
+    root.dir = settings.language === "ar" ? "rtl" : "ltr"
+  }, [settings.language])
 
   // Sync across browser tabs.
   useEffect(() => {

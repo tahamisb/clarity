@@ -3,9 +3,12 @@
 import { useMemo, useState } from "react"
 import { cn } from "@/lib/utils"
 import { type CallRecord } from "@/lib/rafeeq-data"
+import { useT, useTV } from "@/lib/i18n"
 import { Panel } from "./panel"
 
 export function TopTopics({ calls }: { calls: CallRecord[] }) {
+  const t = useT()
+  const tv = useTV()
   const [mode, setMode] = useState<"frequency" | "negative">("frequency")
 
   const rows = useMemo(() => {
@@ -38,8 +41,8 @@ export function TopTopics({ calls }: { calls: CallRecord[] }) {
     <div className="flex rounded-lg border border-border p-0.5 text-xs">
       {(
         [
-          ["frequency", "By Frequency"],
-          ["negative", "By Negativity"],
+          ["frequency", t("topics.byFrequency")],
+          ["negative", t("topics.byNegativity")],
         ] as const
       ).map(([key, label]) => (
         <button
@@ -59,10 +62,10 @@ export function TopTopics({ calls }: { calls: CallRecord[] }) {
   )
 
   return (
-    <Panel title="Top Topics" action={toggle}>
+    <Panel title={t("chart.topTopics")} action={toggle}>
       {calls.length === 0 ? (
         <div className="flex h-24 items-center justify-center text-xs text-muted-foreground">
-          Upload transcripts to see top topics
+          {t("chart.uploadForTopics")}
         </div>
       ) : (
         <div className="overflow-x-auto">
@@ -70,11 +73,11 @@ export function TopTopics({ calls }: { calls: CallRecord[] }) {
             <thead>
               <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                 <th className="px-3 py-2 font-semibold">#</th>
-                <th className="px-3 py-2 font-semibold">Intent</th>
-                <th className="px-3 py-2 font-semibold">Calls</th>
-                <th className="px-3 py-2 font-semibold">% Total</th>
-                <th className="px-3 py-2 font-semibold">Negative %</th>
-                <th className="px-3 py-2 font-semibold">Avg Conf.</th>
+                <th className="px-3 py-2 font-semibold">{t("col.intent")}</th>
+                <th className="px-3 py-2 font-semibold">{t("col.calls")}</th>
+                <th className="px-3 py-2 font-semibold">{t("col.pctTotal")}</th>
+                <th className="px-3 py-2 font-semibold">{t("col.negativePct")}</th>
+                <th className="px-3 py-2 font-semibold">{t("col.avgConf")}</th>
               </tr>
             </thead>
             <tbody>
@@ -87,7 +90,7 @@ export function TopTopics({ calls }: { calls: CallRecord[] }) {
                   )}
                 >
                   <td className="px-3 py-2.5 font-bold text-accent">{t.rank}</td>
-                  <td className="px-3 py-2.5 text-foreground">{t.topic}</td>
+                  <td className="px-3 py-2.5 text-foreground">{tv(t.topic)}</td>
                   <td className="px-3 py-2.5 tabular-nums text-muted-foreground">
                     {t.volume.toLocaleString()}
                   </td>

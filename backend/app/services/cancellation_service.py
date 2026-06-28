@@ -43,6 +43,20 @@ def _T() -> str:
 _CANCELLED = "LOWER(TRIM(order_status)) LIKE '%cancel%'"
 
 
+def _date_pred(start: str | None, end: str | None, col: str = "order_placement_date") -> str:
+    """
+    A ` AND <col> BETWEEN …` fragment for the selected window, appended to an
+    existing WHERE clause. Returns "" when unbounded. `start`/`end` are validated
+    as YYYY-MM-DD by the router before reaching here, so interpolation is safe.
+    """
+    parts: list[str] = []
+    if start:
+        parts.append(f"{col} >= DATE('{start}')")
+    if end:
+        parts.append(f"{col} <= DATE('{end}')")
+    return (" AND " + " AND ".join(parts)) if parts else ""
+
+
 def _run(sql: str) -> list[dict]:
     return [dict(r) for r in get_client().query(sql).result()]
 
@@ -75,14 +89,15 @@ def clear_cache() -> None:
 # Exploration analytics — one function per artifact JSON
 # ---------------------------------------------------------------------------
 
-def _trend_sync() -> dict:
+def _trend_sync(start: str | None = None, end: str | None = None) -> dict:
+    pred = _date_pred(start, end)
     monthly = _run(f"""
         SELECT FORMAT_DATE('%Y-%m', order_placement_date) AS period,
           COUNT(*)                                                                  AS total_orders,
           COUNTIF(LOWER(TRIM(order_status)) LIKE '%cancel%')                                       AS cancelled,
           ROUND(SAFE_DIVIDE(COUNTIF(LOWER(TRIM(order_status)) LIKE '%cancel%'), COUNT(*)) * 100, 2)  AS cancel_rate_pct
         FROM {_T()}
-        WHERE order_placement_date IS NOT NULL
+        WHERE order_placement_date IS NOT NULL{pred}
         GROUP BY period ORDER BY period
     """)
     weekly = _run(f"""
@@ -91,13 +106,14 @@ def _trend_sync() -> dict:
           COUNTIF(LOWER(TRIM(order_status)) LIKE '%cancel%')                                       AS cancelled,
           ROUND(SAFE_DIVIDE(COUNTIF(LOWER(TRIM(order_status)) LIKE '%cancel%'), COUNT(*)) * 100, 2)  AS cancel_rate_pct
         FROM {_T()}
-        WHERE order_placement_date IS NOT NULL
+        WHERE order_placement_date IS NOT NULL{pred}
         GROUP BY period ORDER BY period
     """)
     return {"monthly": monthly, "weekly": weekly}
 
 
-def _by_merchant_sync() -> dict:
+def _by_merchant_sync(start: str | None = None, end: str | None = None) -> dict:
+    pred = _date_pred(start, end)
     base = f"""
         SELECT restaurant_name,
           COUNT(*)                                                                  AS total_orders,
@@ -105,7 +121,7 @@ def _by_merchant_sync() -> dict:
           ROUND(SAFE_DIVIDE(COUNTIF(LOWER(TRIM(order_status)) LIKE '%cancel%'), COUNT(*)) * 100, 2)  AS cancel_rate_pct,
           ROUND(AVG(total_order_value), 2)                                          AS avg_order_value
         FROM {_T()}
-        WHERE restaurant_name IS NOT NULL AND TRIM(restaurant_name) != ''
+        WHERE restaurant_name IS NOT NULL AND TRIM(restaurant_name) != ''{pred}
         GROUP BY restaurant_name
         HAVING total_orders >= 30
     """
@@ -114,7 +130,9 @@ def _by_merchant_sync() -> dict:
     return {"by_volume": by_volume, "by_rate": by_rate}
 
 
-def _by_zone_sync() -> dict:
+def _by_zone_sync(start: str | None = None, end: str | None = None) -> dict:
+    pred = _date_pred(start, end)
+
     def q(col: str) -> list[dict]:
         return _run(f"""
             SELECT {col} AS zone,
@@ -122,7 +140,7 @@ def _by_zone_sync() -> dict:
               COUNTIF(LOWER(TRIM(order_status)) LIKE '%cancel%')                                       AS cancelled,
               ROUND(SAFE_DIVIDE(COUNTIF(LOWER(TRIM(order_status)) LIKE '%cancel%'), COUNT(*)) * 100, 2)  AS cancel_rate_pct
             FROM {_T()}
-            WHERE {col} IS NOT NULL AND TRIM(CAST({col} AS STRING)) != ''
+            WHERE {col} IS NOT NULL AND TRIM(CAST({col} AS STRING)) != ''{pred}
             GROUP BY zone
             HAVING total_orders >= 20
             ORDER BY total_orders DESC LIMIT 30
@@ -130,7 +148,8 @@ def _by_zone_sync() -> dict:
     return {"by_zone_name": q("zone_name"), "by_customer_zone": q("customer_zone")}
 
 
-def _by_time_sync() -> list[dict]:
+def _by_time_sync(start: str | None = None, end: str | None = None) -> list[dict]:
+    pred = _date_pred(start, end)
     return _run(f"""
         WITH bucketed AS (
           SELECT order_status,
@@ -142,7 +161,7 @@ def _by_time_sync() -> list[dict]:
               ELSE 'Late Night'
             END AS time_bucket
           FROM {_T()}
-          WHERE order_placement_time IS NOT NULL
+          WHERE order_placement_time IS NOT NULL{pred}
         )
         SELECT time_bucket,
           COUNT(*)                                                                  AS total_orders,
@@ -154,7 +173,8 @@ def _by_time_sync() -> list[dict]:
     """)
 
 
-def _by_dow_sync() -> list[dict]:
+def _by_dow_sync(start: str | None = None, end: str | None = None) -> list[dict]:
+    pred = _date_pred(start, end)
     return _run(f"""
         SELECT FORMAT_DATE('%A', order_placement_date)  AS day_of_week,
           EXTRACT(DAYOFWEEK FROM order_placement_date)  AS dow_index,
@@ -162,19 +182,20 @@ def _by_dow_sync() -> list[dict]:
           COUNTIF(LOWER(TRIM(order_status)) LIKE '%cancel%')                                       AS cancelled,
           ROUND(SAFE_DIVIDE(COUNTIF(LOWER(TRIM(order_status)) LIKE '%cancel%'), COUNT(*)) * 100, 2)  AS cancel_rate_pct
         FROM {_T()}
-        WHERE order_placement_date IS NOT NULL
+        WHERE order_placement_date IS NOT NULL{pred}
         GROUP BY day_of_week, dow_index
         ORDER BY dow_index
     """)
 
 
-def _by_order_size_sync() -> list[dict]:
+def _by_order_size_sync(start: str | None = None, end: str | None = None) -> list[dict]:
+    pred = _date_pred(start, end)
     return _run(f"""
         WITH q AS (
           SELECT total_order_value, order_status,
             NTILE(4) OVER (ORDER BY total_order_value) AS quartile
           FROM {_T()}
-          WHERE total_order_value IS NOT NULL
+          WHERE total_order_value IS NOT NULL{pred}
         )
         SELECT quartile,
           COUNT(*)                                                                  AS total_orders,
@@ -186,19 +207,21 @@ def _by_order_size_sync() -> list[dict]:
     """)
 
 
-def _by_actor_sync() -> list[dict]:
+def _by_actor_sync(start: str | None = None, end: str | None = None) -> list[dict]:
+    pred = _date_pred(start, end)
     return _run(f"""
         SELECT COALESCE(NULLIF(TRIM(cancelled_by_txt), ''), 'Unknown') AS cancelled_by,
           COUNT(*)                                  AS cancellations,
           ROUND(AVG(total_order_value), 2)          AS avg_order_value
         FROM {_T()}
-        WHERE {_CANCELLED}
+        WHERE {_CANCELLED}{pred}
         GROUP BY cancelled_by
         ORDER BY cancellations DESC
     """)
 
 
-def _crosstabs_sync() -> dict:
+def _crosstabs_sync(start: str | None = None, end: str | None = None) -> dict:
+    pred = _date_pred(start, end)
     zone_time = _run(f"""
         WITH bucketed AS (
           SELECT order_status, zone_name,
@@ -210,7 +233,7 @@ def _crosstabs_sync() -> dict:
               ELSE 'Late Night'
             END AS time_bucket
           FROM {_T()}
-          WHERE order_placement_time IS NOT NULL AND zone_name IS NOT NULL AND TRIM(zone_name) != ''
+          WHERE order_placement_time IS NOT NULL AND zone_name IS NOT NULL AND TRIM(zone_name) != ''{pred}
         )
         SELECT zone_name, time_bucket,
           COUNT(*)                                                                  AS total_orders,
@@ -227,7 +250,7 @@ def _crosstabs_sync() -> dict:
           COUNTIF(LOWER(TRIM(order_status)) LIKE '%cancel%')                                       AS cancelled,
           ROUND(SAFE_DIVIDE(COUNTIF(LOWER(TRIM(order_status)) LIKE '%cancel%'), COUNT(*)) * 100, 2)  AS cancel_rate_pct
         FROM {_T()}
-        WHERE order_placement_date IS NOT NULL AND restaurant_name IS NOT NULL AND TRIM(restaurant_name) != ''
+        WHERE order_placement_date IS NOT NULL AND restaurant_name IS NOT NULL AND TRIM(restaurant_name) != ''{pred}
         GROUP BY restaurant_name, day_of_week
         HAVING total_orders >= 20
         ORDER BY cancel_rate_pct DESC LIMIT 20
@@ -239,41 +262,45 @@ def _crosstabs_sync() -> dict:
 # Async wrappers
 # ---------------------------------------------------------------------------
 
-async def _run_async(fn):
+async def _run_async(fn, *args):
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, fn)
+    return await loop.run_in_executor(None, fn, *args)
 
 
-async def get_trend() -> dict:
-    return await _cached("trend", lambda: _run_async(_trend_sync))
+def _key(base: str, start: str | None, end: str | None) -> str:
+    return f"{base}:{start or ''}:{end or ''}"
 
 
-async def get_by_merchant() -> dict:
-    return await _cached("by_merchant", lambda: _run_async(_by_merchant_sync))
+async def get_trend(start: str | None = None, end: str | None = None) -> dict:
+    return await _cached(_key("trend", start, end), lambda: _run_async(_trend_sync, start, end))
 
 
-async def get_by_zone() -> dict:
-    return await _cached("by_zone", lambda: _run_async(_by_zone_sync))
+async def get_by_merchant(start: str | None = None, end: str | None = None) -> dict:
+    return await _cached(_key("by_merchant", start, end), lambda: _run_async(_by_merchant_sync, start, end))
 
 
-async def get_by_time() -> list[dict]:
-    return await _cached("by_time", lambda: _run_async(_by_time_sync))
+async def get_by_zone(start: str | None = None, end: str | None = None) -> dict:
+    return await _cached(_key("by_zone", start, end), lambda: _run_async(_by_zone_sync, start, end))
 
 
-async def get_by_dow() -> list[dict]:
-    return await _cached("by_dow", lambda: _run_async(_by_dow_sync))
+async def get_by_time(start: str | None = None, end: str | None = None) -> list[dict]:
+    return await _cached(_key("by_time", start, end), lambda: _run_async(_by_time_sync, start, end))
 
 
-async def get_by_order_size() -> list[dict]:
-    return await _cached("by_order_size", lambda: _run_async(_by_order_size_sync))
+async def get_by_dow(start: str | None = None, end: str | None = None) -> list[dict]:
+    return await _cached(_key("by_dow", start, end), lambda: _run_async(_by_dow_sync, start, end))
 
 
-async def get_by_actor() -> list[dict]:
-    return await _cached("by_actor", lambda: _run_async(_by_actor_sync))
+async def get_by_order_size(start: str | None = None, end: str | None = None) -> list[dict]:
+    return await _cached(_key("by_order_size", start, end), lambda: _run_async(_by_order_size_sync, start, end))
 
 
-async def get_crosstabs() -> dict:
-    return await _cached("crosstabs", lambda: _run_async(_crosstabs_sync))
+async def get_by_actor(start: str | None = None, end: str | None = None) -> list[dict]:
+    return await _cached(_key("by_actor", start, end), lambda: _run_async(_by_actor_sync, start, end))
+
+
+async def get_crosstabs(start: str | None = None, end: str | None = None) -> dict:
+    return await _cached(_key("crosstabs", start, end), lambda: _run_async(_crosstabs_sync, start, end))
 
 
 # Mapping used by the exploration script to write artifact JSONs.

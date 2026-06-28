@@ -112,6 +112,10 @@
 
   /* Liquid glass */
   --glass-bg: rgba(255, 255, 255, 0.68);
+  /* Heavier "fogged" glass for floating menus that hold dense text. */
+  --glass-fog-bg: rgba(255, 255, 255, 0.9);
+  --glass-fog-tint-a: rgba(124, 28, 218, 0.1);
+  --glass-fog-tint-b: rgba(38, 132, 255, 0.08);
   --glass-border: rgba(20, 6, 40, 0.08);
   --glass-highlight: rgba(255, 255, 255, 0.85);
   --glass-shadow: 0 8px 28px rgba(40, 9, 73, 0.1);
@@ -176,6 +180,10 @@
 
   /* Liquid glass */
   --glass-bg: rgba(36, 20, 64, 0.5);
+  /* Heavier "fogged" glass for floating menus that hold dense text. */
+  --glass-fog-bg: rgba(28, 16, 50, 0.88);
+  --glass-fog-tint-a: rgba(158, 71, 232, 0.16);
+  --glass-fog-tint-b: rgba(38, 132, 255, 0.12);
   --glass-border: rgba(255, 255, 255, 0.1);
   --glass-highlight: rgba(255, 255, 255, 0.06);
   --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
@@ -201,6 +209,14 @@
   }
   html {
     @apply font-sans;
+  }
+  /* Recharts computes its SVG geometry in a left-to-right coordinate system, so
+     inheriting `dir=rtl` misplaces axis labels (they overlap the bars) and the
+     legend. Force every chart back to LTR — axes/numbers read L→R in any locale;
+     the Arabic tick labels still render correctly inside the LTR chart. */
+  html[dir='rtl'] .recharts-wrapper,
+  html[dir='rtl'] .recharts-surface {
+    direction: ltr;
   }
 }
 
@@ -231,6 +247,22 @@
     background: var(--glass-bg);
     backdrop-filter: blur(24px) saturate(150%);
     -webkit-backdrop-filter: blur(24px) saturate(150%);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow), inset 0 1px 0 var(--glass-highlight);
+  }
+  /* Heavily fogged + marbled glass for dense floating menus (notifications,
+     account). High-opacity base keeps text crisp; the layered radial tints +
+     conic sweep give a soft, randomised marble fog over the blur. */
+  .glass-frosted {
+    background-color: var(--glass-fog-bg);
+    background-image:
+      radial-gradient(120% 110% at 0% 0%, var(--glass-fog-tint-a) 0%, transparent 45%),
+      radial-gradient(110% 120% at 100% 8%, var(--glass-fog-tint-b) 0%, transparent 50%),
+      radial-gradient(140% 120% at 70% 120%, var(--glass-fog-tint-a) 0%, transparent 55%),
+      conic-gradient(from 210deg at 30% 20%, var(--glass-highlight), transparent 35%, var(--glass-fog-tint-b) 60%, transparent 80%);
+    background-blend-mode: normal, normal, normal, soft-light;
+    backdrop-filter: blur(34px) saturate(185%);
+    -webkit-backdrop-filter: blur(34px) saturate(185%);
     border: 1px solid var(--glass-border);
     box-shadow: var(--glass-shadow), inset 0 1px 0 var(--glass-highlight);
   }
@@ -294,4 +326,21 @@
 }
 .leaflet-control-attribution a {
   color: var(--accent);
+}
+
+/* Arabic / RTL fonts — deliberately UNLAYERED.
+   next/font sets --font-geist-sans / --font-display / --font-geist-mono via an
+   unlayered class on <html>, and `.font-*` utilities live in @layer utilities.
+   In Tailwind v4 unlayered CSS beats any @layer, so a rule inside @layer base
+   silently loses (this is why earlier attempts didn't render). Re-pointing the
+   font custom-properties here, unlayered, overrides next/font and flips every
+   `.font-*` consumer (body, headings, mono labels) to Cairo at once — Archivo
+   and Geist have no Arabic glyphs and would otherwise fall back to a serif. */
+html[dir='rtl'] {
+  --font-geist-sans: var(--font-arabic);
+  --font-geist-mono: var(--font-arabic);
+  --font-display: var(--font-arabic);
+}
+html[dir='rtl'] .display-italic {
+  font-style: normal; /* Cairo has no italic; the heavy Latin slant looks wrong in Arabic */
 }

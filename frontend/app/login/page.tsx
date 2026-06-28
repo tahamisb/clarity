@@ -1,6 +1,9 @@
-import { AlertCircle } from "lucide-react"
+import { AlertCircle, Info } from "lucide-react"
+import { AuthError } from "next-auth"
+import { redirect } from "next/navigation"
 import { signIn } from "@/auth"
-import { ALLOWED_DOMAIN } from "@/auth.config"
+import { ALLOWED_DOMAIN, GOOGLE_ENABLED } from "@/auth.config"
+import { RoleSelect } from "@/components/rafeeq/role-select"
 
 export const metadata = {
   title: "Sign in · Rafeeq Analytics",
@@ -12,6 +15,25 @@ export default async function LoginPage({
   searchParams: Promise<{ error?: string }>
 }) {
   const { error } = await searchParams
+
+  async function loginWithCredentials(formData: FormData) {
+    "use server"
+    try {
+      await signIn("credentials", {
+        email: formData.get("email"),
+        password: formData.get("password"),
+        role: formData.get("role"),
+        redirectTo: "/",
+      })
+    } catch (err) {
+      // A successful sign-in throws a NEXT_REDIRECT we must let through;
+      // only credential failures are AuthErrors.
+      if (err instanceof AuthError) {
+        redirect("/login?error=CredentialsSignin")
+      }
+      throw err
+    }
+  }
 
   return (
     <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background p-6">
@@ -34,7 +56,7 @@ export default async function LoginPage({
           <p className="mt-2 text-sm text-muted-foreground">
             Restricted to{" "}
             <span className="font-semibold text-foreground">@{ALLOWED_DOMAIN}</span>{" "}
-            accounts. Sign in with your work Google account to continue.
+            accounts. Sign in with your work email to continue.
           </p>
         </div>
 
@@ -42,33 +64,81 @@ export default async function LoginPage({
           <div className="mt-6 flex items-start gap-2.5 rounded-xl border border-negative/30 bg-negative/10 p-3.5 text-sm text-negative">
             <AlertCircle className="mt-0.5 size-4 shrink-0" />
             <p>
-              {error === "AccessDenied"
-                ? `Access denied. Only @${ALLOWED_DOMAIN} Google accounts are allowed.`
-                : "Something went wrong while signing in. Please try again."}
+              {error === "CredentialsSignin"
+                ? `Invalid credentials. Use your @${ALLOWED_DOMAIN} email and the team access password.`
+                : error === "AccessDenied"
+                  ? `Access denied. Only @${ALLOWED_DOMAIN} accounts are allowed.`
+                  : "Something went wrong while signing in. Please try again."}
             </p>
           </div>
         )}
 
-        <form
-          action={async () => {
-            "use server"
-            await signIn("google", { redirectTo: "/" })
-          }}
-          className="mt-8"
-        >
+        {/* Placeholder credentials login */}
+        <form action={loginWithCredentials} className="mt-8 flex flex-col gap-3">
+          <label className="flex flex-col gap-1.5 text-left">
+            <span className="text-xs font-semibold text-muted-foreground">Work email</span>
+            <input
+              type="email"
+              name="email"
+              required
+              autoComplete="email"
+              placeholder={`you@${ALLOWED_DOMAIN}`}
+              className="rounded-xl border border-border bg-secondary/50 px-3.5 py-2.5 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-accent/50"
+            />
+          </label>
+          <label className="flex flex-col gap-1.5 text-left">
+            <span className="text-xs font-semibold text-muted-foreground">Access password</span>
+            <input
+              type="password"
+              name="password"
+              required
+              autoComplete="current-password"
+              placeholder="••••••••"
+              className="rounded-xl border border-border bg-secondary/50 px-3.5 py-2.5 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-accent/50"
+            />
+          </label>
+          <RoleSelect />
           <button
             type="submit"
-            className="flex w-full items-center justify-center gap-3 rounded-full border border-border bg-card px-5 py-3 text-sm font-bold text-foreground shadow-sm transition-all hover:-translate-y-0.5 hover:bg-secondary"
+            className="mt-1 flex w-full items-center justify-center gap-2 rounded-full bg-primary px-5 py-3 text-sm font-bold text-primary-foreground shadow-sm transition-all hover:-translate-y-0.5"
           >
-            <GoogleIcon />
-            Continue with Google
+            Sign in
           </button>
         </form>
 
-        <p className="mt-6 text-center text-xs text-muted-foreground">
-          Access is by invitation only. There is no public sign-up — contact your
-          administrator if you need an account.
-        </p>
+        {/* Google is only offered once IT provisions real OAuth credentials */}
+        {GOOGLE_ENABLED && (
+          <>
+            <div className="my-6 flex items-center gap-3 text-xs text-muted-foreground">
+              <span className="h-px flex-1 bg-border" />
+              or
+              <span className="h-px flex-1 bg-border" />
+            </div>
+            <form
+              action={async () => {
+                "use server"
+                await signIn("google", { redirectTo: "/" })
+              }}
+            >
+              <button
+                type="submit"
+                className="flex w-full items-center justify-center gap-3 rounded-full border border-border bg-card px-5 py-3 text-sm font-bold text-foreground shadow-sm transition-all hover:-translate-y-0.5 hover:bg-secondary"
+              >
+                <GoogleIcon />
+                Continue with Google
+              </button>
+            </form>
+          </>
+        )}
+
+        <div className="mt-6 flex items-start gap-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs leading-relaxed text-amber-700 dark:text-amber-400">
+          <Info className="mt-0.5 size-3.5 shrink-0" />
+          <p>
+            Temporary access: this shared-password login is a placeholder until IT
+            provisions Google SSO. Access is by invitation only — there is no
+            public sign-up.
+          </p>
+        </div>
       </div>
 
       <p className="absolute bottom-5 left-0 right-0 z-10 text-center text-xs text-muted-foreground">

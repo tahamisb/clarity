@@ -2,6 +2,7 @@
 
 import { Download, RotateCcw } from "lucide-react"
 import { Dropdown } from "./dropdown"
+import { useT } from "@/lib/i18n"
 
 export type CallFilters = {
   category: string | null
@@ -28,6 +29,7 @@ export function FilterBar({
   onReset: () => void
   onExport: () => void
 }) {
+  const t = useT()
   const hasActive =
     filters.category !== null ||
     filters.sentiment !== null ||
@@ -36,19 +38,19 @@ export function FilterBar({
   return (
     <div className="glass flex flex-wrap items-center gap-2 rounded-2xl p-3">
       <Dropdown
-        label="All categories"
+        label={t("filter.allCategories")}
         value={filters.category}
         options={categories}
         onChange={(v) => onChange({ ...filters, category: v })}
       />
       <Dropdown
-        label="All sentiment"
+        label={t("filter.allSentiment")}
         value={filters.sentiment}
         options={sentiments}
         onChange={(v) => onChange({ ...filters, sentiment: v })}
       />
       <Dropdown
-        label="All agents"
+        label={t("filter.allAgents")}
         value={filters.agent}
         options={agents}
         onChange={(v) => onChange({ ...filters, agent: v })}
@@ -60,12 +62,12 @@ export function FilterBar({
           className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
         >
           <RotateCcw className="size-3.5" />
-          Reset
+          {t("filter.reset")}
         </button>
       )}
 
       <span className="hidden text-xs text-muted-foreground sm:inline">
-        {resultCount.toLocaleString()} matching calls
+        {t("filter.matchingCalls", { n: resultCount.toLocaleString() })}
       </span>
 
       <button
@@ -73,7 +75,7 @@ export function FilterBar({
         className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-1.5 text-xs font-bold text-primary-foreground shadow-sm transition-transform hover:-translate-y-0.5"
       >
         <Download className="size-3.5" />
-        Export CSV
+        {t("filter.exportCsv")}
       </button>
     </div>
   )

@@ -63,7 +63,7 @@ export default function QatarMapLeaflet({ cities }: { cities: MapCity[] }) {
     [cities],
   )
 
-  // Pixel radius scaled by call volume (sqrt keeps small cities visible)
+  // Pixel radius scaled by call volume (sqrt keeps small cities visible).
   const radiusFor = (calls: number) =>
     9 + (Math.sqrt(calls) / Math.sqrt(maxCalls)) * 22
 
@@ -101,11 +101,7 @@ export default function QatarMapLeaflet({ cities }: { cities: MapCity[] }) {
             <CircleMarker
               center={[c.lat, c.lon]}
               radius={r * 1.9}
-              pathOptions={{
-                color: "transparent",
-                fillColor: c.color,
-                fillOpacity: 0.12,
-              }}
+              pathOptions={{ color: "transparent", fillColor: c.color, fillOpacity: 0.12 }}
               interactive={false}
             />
             {/* Solid core marker */}
@@ -116,7 +112,7 @@ export default function QatarMapLeaflet({ cities }: { cities: MapCity[] }) {
                 color: isDark ? "#ffffff" : "#1a1226",
                 weight: 1.5,
                 fillColor: c.color,
-                fillOpacity: 0.85,
+                fillOpacity: 0.88,
               }}
             >
               <Tooltip direction="top" offset={[0, -r]} opacity={1} sticky>

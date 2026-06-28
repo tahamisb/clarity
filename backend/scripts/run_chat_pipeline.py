@@ -18,7 +18,7 @@ from app.services import bq_text as bq
 from app.services import bq_chats as bqc
 from app.services.text_classifier import classify_chat_messages
 from app.utils.chat_cleaner import clean_chat_messages
-from app.utils.helpers import derive_channel, utcnow_iso
+from app.utils.helpers import derive_agent_name, derive_channel, utcnow_iso
 
 async def run(batch_size: int, limit: int, dry_run: bool) -> None:
     settings = get_settings()
@@ -71,6 +71,7 @@ async def run(batch_size: int, limit: int, dry_run: bool) -> None:
                 channel = derive_channel(chat.get("type"), chat.get("device_id"))
                 
                 # We reuse chat_id as message_id for deduplication
+                closed_at = chat.get("closed_at")
                 good_msgs.append({
                     "message_id": chat_id,
                     "customer_id": chat.get("customer_id"),
@@ -80,6 +81,8 @@ async def run(batch_size: int, limit: int, dry_run: bool) -> None:
                     "zone": chat.get("zone"),
                     "created_at": str(chat.get("created_at", "")),
                     "ingested_at": utcnow_iso(),
+                    "closed_at": str(closed_at) if closed_at else None,
+                    "agent_name": derive_agent_name(chat.get("closed_by")),
                 })
                 
                 good_clfs.append({

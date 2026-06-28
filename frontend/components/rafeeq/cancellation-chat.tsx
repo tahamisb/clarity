@@ -5,15 +5,12 @@ import { Send, Sparkles, Loader2 } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { askCancellationChat } from "@/lib/api"
+import { useT } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 
 type ChatMessage = { role: "user" | "bot"; text: string }
 
-const SUGGESTIONS = [
-  "Why did cancellations spike recently?",
-  "Which zones are getting worse?",
-  "What drives merchant-side cancellations?",
-]
+const SUGGESTION_KEYS = ["cc.suggestion1", "cc.suggestion2", "cc.suggestion3"]
 
 // Markdown renderers — mirror the main chatbot styling
 const MD_COMPONENTS = {
@@ -46,6 +43,7 @@ const MD_COMPONENTS = {
 }
 
 export function CancellationChat() {
+  const t = useT()
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState("")
   const [loading, setLoading] = useState(false)
@@ -61,7 +59,7 @@ export function CancellationChat() {
     const res = await askCancellationChat(q)
     setMessages([
       ...next,
-      { role: "bot", text: res?.answer ?? "Sorry — I couldn't reach the analysis service. Is the backend running?" },
+      { role: "bot", text: res?.answer ?? t("cc.error") },
     ])
     setLoading(false)
     requestAnimationFrame(() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight }))
@@ -71,23 +69,23 @@ export function CancellationChat() {
     <div className="flex h-full flex-col rounded-xl border border-border bg-card shadow-sm">
       <div className="flex items-center gap-2 border-b border-border p-4 text-primary">
         <Sparkles className="size-5" />
-        <h2 className="text-sm font-semibold uppercase tracking-wide">Ask the Cancellation Analyst</h2>
+        <h2 className="text-sm font-semibold uppercase tracking-wide">{t("cc.title")}</h2>
       </div>
 
       <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto p-4" style={{ maxHeight: 420 }}>
         {messages.length === 0 && (
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              Ask natural-language questions about cancellations. Answers are grounded on live order data.
+              {t("cc.intro")}
             </p>
             <div className="flex flex-wrap gap-2">
-              {SUGGESTIONS.map((s) => (
+              {SUGGESTION_KEYS.map((key) => (
                 <button
-                  key={s}
-                  onClick={() => send(s)}
+                  key={key}
+                  onClick={() => send(t(key))}
                   className="rounded-full border border-border bg-secondary/60 px-3 py-1.5 text-xs text-foreground transition-colors hover:border-accent/50"
                 >
-                  {s}
+                  {t(key)}
                 </button>
               ))}
             </div>
@@ -118,7 +116,7 @@ export function CancellationChat() {
         {loading && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="size-4 animate-spin text-accent" />
-            Analyzing cancellation data…
+            {t("cc.analyzing")}
           </div>
         )}
       </div>
@@ -133,7 +131,7 @@ export function CancellationChat() {
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Ask about cancellation drivers, zones, trends…"
+          placeholder={t("cc.placeholder")}
           className="flex-1 rounded-full border border-border bg-background px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40"
         />
         <button

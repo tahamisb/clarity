@@ -4,6 +4,7 @@ import { useState } from "react"
 import {
   Palette, Clock, SlidersHorizontal, Plug, Database,
   MessageSquare, Plus, X, Save, Check, Mail, Hash, RefreshCw,
+  Bell, Ban, Frown, Lock,
 } from "lucide-react"
 import { Sidebar } from "@/components/rafeeq/sidebar"
 import { Topbar } from "@/components/rafeeq/topbar"
@@ -11,6 +12,8 @@ import { Panel } from "@/components/rafeeq/panel"
 import { ThemeToggle } from "@/components/rafeeq/theme-toggle"
 import { WorkInProgress, WipBadge } from "@/components/rafeeq/work-in-progress"
 import { REFRESH_OPTIONS, useSettings } from "@/lib/settings-context"
+import { useRole } from "@/lib/use-role"
+import { useT } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 
 // ---------------------------------------------------------------------------
@@ -71,7 +74,7 @@ function NumberField({ value, onChange, suffix, className }: { value: number; on
   )
 }
 
-function SettingRow({ title, desc, children }: { title: string; desc?: string; children: React.ReactNode }) {
+function SettingRow({ title, desc, children }: { title: React.ReactNode; desc?: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-3 border-b border-border py-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
       <div className="max-w-md">
@@ -83,15 +86,19 @@ function SettingRow({ title, desc, children }: { title: string; desc?: string; c
   )
 }
 
+// Names/descriptions resolve through i18n at render time (see lib/i18n.tsx).
 const INTEGRATIONS = [
-  { name: "Delivery Dispatch System", desc: "Correlate driver delays with cancellations", icon: MessageSquare, status: "Connected" },
-  { name: "Zendesk / Salesforce", desc: "Sync inbound support messages & tickets", icon: Database, status: "Connected" },
-  { name: "Customer Database", desc: "Enrich profiles, order history & zones", icon: Database, status: "Not connected" },
+  { nameKey: "integ.dispatch", descKey: "integ.dispatchDesc", icon: MessageSquare, connected: true },
+  { nameKey: "integ.crm", descKey: "integ.crmDesc", icon: Database, connected: true },
+  { nameKey: "integ.customerDb", descKey: "integ.customerDbDesc", icon: Database, connected: false },
 ]
 
 export default function SettingsPage() {
+  const t = useT()
   const [search, setSearch] = useState("")
   const { settings, update } = useSettings()
+  const role = useRole()
+  const isManager = role === "manager"
 
   // ML tuning (keyword → intent mappings remain a local prototype — see WIP badge)
   const [mappings, setMappings] = useState([
@@ -120,15 +127,15 @@ export default function SettingsPage() {
     <div className="flex min-h-screen">
       <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar title="Settings" search={search} onSearch={setSearch} />
+        <Topbar title={t("set.title")} search={search} onSearch={setSearch} />
 
         <main className="flex flex-1 flex-col gap-6 p-4 md:p-6">
           {/* Header */}
           <div className="flex flex-col items-start gap-2 border-b border-border pb-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">Settings</h1>
+              <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">{t("set.title")}</h1>
               <p className="mt-1 text-sm text-muted-foreground">
-                Configure appearance, SLAs, alerting, the ML classifier, and integrations.
+                {t("set.subtitle")}
               </p>
             </div>
             <button
@@ -139,16 +146,16 @@ export default function SettingsPage() {
               )}
             >
               {saved ? <Check className="size-4" /> : <Save className="size-4" />}
-              {saved ? "Saved" : "Save changes"}
+              {saved ? t("set.saved") : t("set.save")}
             </button>
           </div>
 
           {/* Appearance */}
-          <Panel title="Appearance" action={<Palette className="size-4 text-accent" />}>
-            <SettingRow title="Theme" desc="Switch between light and dark, or follow your device. System matches your OS setting automatically.">
+          <Panel title={t("set.appearance")} action={<Palette className="size-4 text-accent" />}>
+            <SettingRow title={t("set.theme")} desc={t("set.themeDesc")}>
               <ThemeToggle />
             </SettingRow>
-            <SettingRow title="Language" desc="Dashboard localization. Arabic switches the interface to right-to-left.">
+            <SettingRow title={t("set.language")} desc={t("set.languageDesc")}>
               <Segmented
                 value={settings.language}
                 onChange={(v) => update({ language: v })}
@@ -158,10 +165,10 @@ export default function SettingsPage() {
           </Panel>
 
           {/* Live data & auto-refresh */}
-          <Panel title="Live Data & Auto-Refresh" action={<RefreshCw className="size-4 text-accent" />}>
+          <Panel title={t("set.liveData")} action={<RefreshCw className="size-4 text-accent" />}>
             <SettingRow
-              title="Auto-refresh interval"
-              desc="How often Call Intelligence, Support Messages and Cancellations re-fetch their data from the backend in the background. Set to Off to refresh manually only."
+              title={t("set.refreshInterval")}
+              desc={t("set.refreshIntervalDesc")}
             >
               <div className="flex flex-wrap items-center gap-1 rounded-full border border-border bg-secondary/60 p-1">
                 {REFRESH_OPTIONS.map((o) => (
@@ -175,7 +182,7 @@ export default function SettingsPage() {
                         : "text-muted-foreground hover:text-foreground",
                     )}
                   >
-                    {o.label}
+                    {t(`refresh.${o.value}`)}
                   </button>
                 ))}
               </div>
@@ -183,44 +190,101 @@ export default function SettingsPage() {
           </Panel>
 
           {/* SLA & Alerts */}
-          <Panel title="SLA & Alert Configurations" action={<Clock className="size-4 text-accent" />}>
-            <SettingRow title="Custom SLA Targets" desc="Define target resolution times. Visual breach indicators appear on the dashboards as teams near these limits.">
+          <Panel title={t("set.slaAlerts")} action={<Clock className="size-4 text-accent" />}>
+            <SettingRow title={t("set.customSla")} desc={t("set.customSlaDesc")}>
               <div className="flex items-center gap-4">
                 <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                  Chat <NumberField value={settings.chatSlaHours} onChange={(v) => update({ chatSlaHours: v })} suffix="h" />
+                  {t("set.chat")} <NumberField value={settings.chatSlaHours} onChange={(v) => update({ chatSlaHours: v })} suffix={t("set.hoursSuffix")} />
                 </label>
                 <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                  General <NumberField value={settings.generalSlaHours} onChange={(v) => update({ generalSlaHours: v })} suffix="h" />
+                  {t("set.general")} <NumberField value={settings.generalSlaHours} onChange={(v) => update({ generalSlaHours: v })} suffix={t("set.hoursSuffix")} />
                 </label>
               </div>
             </SettingRow>
-            <SettingRow title="Cancellation alert threshold" desc="Show an alert on the Cancellations dashboard (and notify the channels below) when the cancellation rate in any zone exceeds this percentage.">
+            <SettingRow title={t("set.cancelThreshold")} desc={t("set.cancelThresholdDesc")}>
               <NumberField value={settings.cancelThresholdPct} onChange={(v) => update({ cancelThresholdPct: v })} suffix="%" />
             </SettingRow>
-            <SettingRow title="Sentiment spike threshold" desc="Alert on the Support Messages dashboard when negative sentiment jumps week-over-week by more than this many points.">
-              <NumberField value={settings.sentimentSpikePct} onChange={(v) => update({ sentimentSpikePct: v })} suffix="pts" />
+            <SettingRow title={t("set.sentimentSpike")} desc={t("set.sentimentSpikeDesc")}>
+              <NumberField value={settings.sentimentSpikePct} onChange={(v) => update({ sentimentSpikePct: v })} suffix={t("set.ptsSuffix")} />
             </SettingRow>
-            <SettingRow title="Alert channels" desc="Which channels the threshold alerts above are delivered to.">
+            <SettingRow title={t("set.alertChannels")} desc={t("set.alertChannelsDesc")}>
               <div className="flex items-center gap-5">
-                <span className="flex items-center gap-2 text-sm text-foreground"><Hash className="size-4 text-muted-foreground" />Slack <Switch checked={settings.slackAlerts} onChange={(v) => update({ slackAlerts: v })} label="Slack alerts" /></span>
-                <span className="flex items-center gap-2 text-sm text-foreground"><Mail className="size-4 text-muted-foreground" />Email <Switch checked={settings.emailAlerts} onChange={(v) => update({ emailAlerts: v })} label="Email alerts" /></span>
+                <span className="flex items-center gap-2 text-sm text-foreground"><Hash className="size-4 text-muted-foreground" />{t("set.slack")} <Switch checked={settings.slackAlerts} onChange={(v) => update({ slackAlerts: v })} label={t("set.slack")} /></span>
+                <span className="flex items-center gap-2 text-sm text-foreground"><Mail className="size-4 text-muted-foreground" />{t("set.email")} <Switch checked={settings.emailAlerts} onChange={(v) => update({ emailAlerts: v })} label={t("set.email")} /></span>
               </div>
+            </SettingRow>
+          </Panel>
+
+          {/* Notifications */}
+          <Panel
+            title={t("set.notifications")}
+            action={
+              <span className="flex items-center gap-2">
+                <span className="rounded-full bg-accent/15 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-accent">
+                  {t(`role.${role}`)}
+                </span>
+                <Bell className="size-4 text-accent" />
+              </span>
+            }
+          >
+            <p className="border-b border-border pb-4 text-xs leading-relaxed text-muted-foreground">
+              {t("set.notifIntro")}{" "}
+              <span className="font-semibold text-foreground">{t(`role.${role}`)}</span>{" "}
+              {isManager ? t("set.notifIntroManager") : t("set.notifIntroEmployee")}
+            </p>
+
+            <SettingRow
+              title={<span className="flex items-center gap-2"><Clock className="size-4 text-destructive" />{t("set.slaBreach")}</span>}
+              desc={t("set.slaBreachDesc", { chat: settings.chatSlaHours, general: settings.generalSlaHours })}
+            >
+              <Switch checked={settings.notifySlaBreaches} onChange={(v) => update({ notifySlaBreaches: v })} label={t("set.slaBreach")} />
+            </SettingRow>
+
+            <SettingRow
+              title={<span className="flex items-center gap-2"><Ban className="size-4 text-destructive" />{t("set.highRisk")}</span>}
+              desc={t("set.highRiskDesc")}
+            >
+              <Switch checked={settings.notifyHighRiskCancellations} onChange={(v) => update({ notifyHighRiskCancellations: v })} label={t("set.highRisk")} />
+            </SettingRow>
+
+            <SettingRow
+              title={
+                <span className="flex items-center gap-2">
+                  <Frown className="size-4 text-amber-500" />{t("set.helpfulness")}
+                  {!isManager && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                      <Lock className="size-3" />{t("set.managerOnly")}
+                    </span>
+                  )}
+                </span>
+              }
+              desc={t("set.helpfulnessDesc")}
+            >
+              <span className={cn(!isManager && "cursor-not-allowed opacity-40")} title={isManager ? undefined : t("set.managerOnlyTitle")}>
+                <span className={cn(!isManager && "pointer-events-none")}>
+                  <Switch
+                    checked={isManager && settings.notifyAgentHelpfulness}
+                    onChange={(v) => isManager && update({ notifyAgentHelpfulness: v })}
+                    label={t("set.helpfulness")}
+                  />
+                </span>
+              </span>
             </SettingRow>
           </Panel>
 
           {/* ML Model Tuning */}
           <Panel
-            title="ML Model Tuning & Simulator"
+            title={t("set.mlTuning")}
             action={<span className="flex items-center gap-2"><WipBadge /><SlidersHorizontal className="size-4 text-accent" /></span>}
           >
-           <WorkInProgress note="Confidence tuning and the keyword → intent simulator are under active development.">
+           <WorkInProgress note={t("set.mlWipNote")} label={t("common.workInProgress")}>
             <div className="border-b border-border py-4">
               <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-foreground">Confidence threshold</p>
+                <p className="text-sm font-semibold text-foreground">{t("set.confidence")}</p>
                 <span className="rounded-full bg-accent/15 px-2.5 py-0.5 text-xs font-bold text-accent">{settings.confidencePct}%</span>
               </div>
               <p className="mt-0.5 max-w-md text-xs leading-relaxed text-muted-foreground">
-                Cutoff used to flag “Live High-Risk Orders” on the Cancellations page. Higher values surface fewer, higher-confidence orders.
+                {t("set.confidenceDesc")}
               </p>
               <input
                 type="range"
@@ -231,15 +295,15 @@ export default function SettingsPage() {
                 className="mt-3 w-full accent-[var(--primary)]"
               />
               <div className="mt-1 flex justify-between text-[10px] text-muted-foreground">
-                <span>50% · more flags</span>
-                <span>90% · high precision</span>
+                <span>{t("set.confidenceMore")}</span>
+                <span>{t("set.confidenceHigh")}</span>
               </div>
             </div>
 
             <div className="py-4">
-              <p className="text-sm font-semibold text-foreground">Keyword → Intent mapping</p>
+              <p className="text-sm font-semibold text-foreground">{t("set.keywordIntent")}</p>
               <p className="mt-0.5 max-w-md text-xs leading-relaxed text-muted-foreground">
-                Customize how the NLP engine maps incoming customer keywords to support intents.
+                {t("set.keywordIntentDesc")}
               </p>
               <ul className="mt-3 flex flex-col gap-2">
                 {mappings.map((m, i) => (
@@ -250,7 +314,7 @@ export default function SettingsPage() {
                     <button
                       onClick={() => setMappings((arr) => arr.filter((_, idx) => idx !== i))}
                       className="ml-auto text-muted-foreground transition-colors hover:text-negative"
-                      aria-label="Remove mapping"
+                      aria-label={t("set.removeMapping")}
                     >
                       <X className="size-4" />
                     </button>
@@ -261,14 +325,14 @@ export default function SettingsPage() {
                 <input
                   value={newKeyword}
                   onChange={(e) => setNewKeyword(e.target.value)}
-                  placeholder="customer keyword"
+                  placeholder={t("set.keywordPlaceholder")}
                   className="flex-1 min-w-[140px] rounded-lg border border-border bg-secondary/50 px-3 py-1.5 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-accent/50"
                 />
-                <span className="text-muted-foreground">→</span>
+                <span className="text-muted-foreground rtl:-scale-x-100">→</span>
                 <input
                   value={newIntent}
                   onChange={(e) => setNewIntent(e.target.value)}
-                  placeholder="intent label"
+                  placeholder={t("set.intentPlaceholder")}
                   className="flex-1 min-w-[140px] rounded-lg border border-border bg-secondary/50 px-3 py-1.5 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-accent/50"
                 />
                 <button
@@ -276,7 +340,7 @@ export default function SettingsPage() {
                   className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-1.5 text-xs font-bold text-primary-foreground transition-transform hover:-translate-y-0.5"
                 >
                   <Plus className="size-3.5" />
-                  Add
+                  {t("set.add")}
                 </button>
               </div>
             </div>
@@ -285,41 +349,38 @@ export default function SettingsPage() {
 
           {/* Integrations */}
           <Panel
-            title="Data Connections & Integrations"
+            title={t("set.integrations")}
             action={<span className="flex items-center gap-2"><WipBadge /><Plug className="size-4 text-accent" /></span>}
           >
-           <WorkInProgress note="Connecting external data sources and integrations is coming soon.">
+           <WorkInProgress note={t("set.integrationsWipNote")} label={t("common.workInProgress")}>
             <ul className="flex flex-col">
-              {INTEGRATIONS.map((it) => {
-                const connected = it.status === "Connected"
-                return (
-                  <li key={it.name} className="flex items-center gap-3 border-b border-border py-4 last:border-b-0">
+              {INTEGRATIONS.map((it) => (
+                  <li key={it.nameKey} className="flex items-center gap-3 border-b border-border py-4 last:border-b-0">
                     <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary/20 to-brand-bright/10 text-accent ring-1 ring-accent/20">
                       <it.icon className="size-5" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold text-foreground">{it.name}</p>
-                      <p className="truncate text-xs text-muted-foreground">{it.desc}</p>
+                      <p className="text-sm font-semibold text-foreground">{t(it.nameKey)}</p>
+                      <p className="truncate text-xs text-muted-foreground">{t(it.descKey)}</p>
                     </div>
                     <span className={cn(
                       "hidden items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold sm:inline-flex",
-                      connected ? "bg-positive/15 text-positive" : "bg-secondary text-muted-foreground",
+                      it.connected ? "bg-positive/15 text-positive" : "bg-secondary text-muted-foreground",
                     )}>
-                      <span className={cn("size-1.5 rounded-full", connected ? "bg-positive" : "bg-muted-foreground")} />
-                      {it.status}
+                      <span className={cn("size-1.5 rounded-full", it.connected ? "bg-positive" : "bg-muted-foreground")} />
+                      {t(it.connected ? "integ.connected" : "integ.notConnected")}
                     </span>
                     <button className="rounded-full border border-border bg-secondary/50 px-4 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-secondary">
-                      {connected ? "Configure" : "Connect"}
+                      {t(it.connected ? "integ.configure" : "integ.connect")}
                     </button>
                   </li>
-                )
-              })}
+              ))}
             </ul>
            </WorkInProgress>
           </Panel>
 
           <footer className="pb-4 pt-2 text-center text-xs text-muted-foreground">
-            Rafeeq Analytics · Settings
+            {t("set.footer")}
           </footer>
         </main>
       </div>

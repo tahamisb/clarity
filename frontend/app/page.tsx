@@ -8,7 +8,7 @@ import {
   type Sentiment,
   type Category,
 } from "@/lib/rafeeq-data"
-import { fetchCalls } from "@/lib/api"
+import { fetchCalls, clearServerCache } from "@/lib/api"
 import { Sidebar } from "@/components/rafeeq/sidebar"
 import { Topbar } from "@/components/rafeeq/topbar"
 import { HeroBanner } from "@/components/rafeeq/hero-banner"
@@ -23,7 +23,11 @@ import { SentimentTrend } from "@/components/rafeeq/sentiment-trend"
 import { TopTopics } from "@/components/rafeeq/top-topics"
 import { CallAnalysisLoading } from "@/components/rafeeq/loading-screen"
 import { RefreshStatus } from "@/components/rafeeq/refresh-status"
+import { GlobalTimeRange } from "@/components/rafeeq/time-range-select"
 import { useAutoRefresh } from "@/lib/settings-context"
+import { useTimeFilter } from "@/lib/time-filter-context"
+import { filterByRange } from "@/lib/time-range"
+import { useT, useTV } from "@/lib/i18n"
 
 const CATEGORIES = [
   "Billing", "Technical", "Roaming", "Account Access", "Returns", "Complaints", "General",
@@ -166,6 +170,8 @@ async function parseFile(file: File): Promise<string[]> {
 // Page
 // ---------------------------------------------------------------------------
 export default function Page() {
+  const t = useT()
+  const tv = useTV()
   const [calls, setCalls] = useState<CallRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -188,17 +194,19 @@ export default function Page() {
     (background = false) => {
       if (background) setRefreshing(true)
       else setLoading(true)
-      fetchCalls().then((data) => {
+      // A refresh re-reads from BigQuery; bust the server cache first so it does.
+      const ready = background ? clearServerCache() : Promise.resolve()
+      ready.then(fetchCalls).then((data) => {
         if (data?.length) {
           setCalls(data)
-          if (!background) showToast(`Loaded ${data.length} calls`)
+          if (!background) showToast(t("ci.loadedCalls", { n: data.length }))
         }
         setLastUpdated(new Date())
         if (background) setRefreshing(false)
         else setLoading(false)
       })
     },
-    [showToast],
+    [showToast, t],
   )
 
   useEffect(() => {
@@ -208,29 +216,37 @@ export default function Page() {
   // Re-fetch on the cadence configured on the Settings page.
   useAutoRefresh(() => loadData(true))
 
+  // Global time-range filter. Calls carry a per-record `datetime`, so the whole
+  // page (stats, charts, map, table) derives from this client-filtered set.
+  const { range } = useTimeFilter()
+  const scopedCalls = useMemo(
+    () => filterByRange(calls, range, (c) => c.datetime),
+    [calls, range],
+  )
+
   // ---------------------------------------------------------------------------
   // Unique agent names extracted from actual call data
   // ---------------------------------------------------------------------------
   const agents = useMemo(() => {
     const seen = new Set<string>()
-    for (const c of calls) {
+    for (const c of scopedCalls) {
       if (c.agent && c.agent !== "—") seen.add(c.agent)
     }
     return Array.from(seen).sort()
-  }, [calls])
+  }, [scopedCalls])
 
   // ---------------------------------------------------------------------------
   // Derived stats for the stat cards
   // ---------------------------------------------------------------------------
   const stats = useMemo(() => {
-    const total = calls.length
+    const total = scopedCalls.length
     if (total === 0) return { total: 0, avgDuration: "—", negativeRate: "—", topCategory: "—" }
 
-    const avgSec = calls.reduce((s, c) => s + c.durationSec, 0) / total
-    const negCount = calls.filter((c) => c.sentiment === "Negative").length
+    const avgSec = scopedCalls.reduce((s, c) => s + c.durationSec, 0) / total
+    const negCount = scopedCalls.filter((c) => c.sentiment === "Negative").length
 
     const catMap: Record<string, number> = {}
-    for (const c of calls) catMap[c.category] = (catMap[c.category] || 0) + 1
+    for (const c of scopedCalls) catMap[c.category] = (catMap[c.category] || 0) + 1
     const topCategory = Object.entries(catMap).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "—"
 
     return {
@@ -239,14 +255,14 @@ export default function Page() {
       negativeRate: `${((negCount / total) * 100).toFixed(1)}%`,
       topCategory,
     }
-  }, [calls])
+  }, [scopedCalls])
 
   // ---------------------------------------------------------------------------
   // Filtered calls for the table
   // ---------------------------------------------------------------------------
   const filteredCalls = useMemo(() => {
     const q = search.trim().toLowerCase()
-    return calls.filter((c) => {
+    return scopedCalls.filter((c) => {
       if (filters.category && c.category !== filters.category) return false
       if (filters.sentiment && c.sentiment !== filters.sentiment) return false
       if (filters.agent && c.agent !== filters.agent) return false
@@ -255,7 +271,7 @@ export default function Page() {
         return false
       return true
     })
-  }, [calls, filters, intentFilter, search])
+  }, [scopedCalls, filters, intentFilter, search])
 
   const resetFilters = useCallback(() => {
     setFilters({ category: null, sentiment: null, agent: null })
@@ -279,8 +295,8 @@ export default function Page() {
     a.download = `rafeeq-calls-${new Date().toISOString().slice(0, 10)}.csv`
     a.click()
     URL.revokeObjectURL(url)
-    showToast(`Exported ${filteredCalls.length} calls to CSV`)
-  }, [filteredCalls, showToast])
+    showToast(t("ci.exportedCalls", { n: filteredCalls.length }))
+  }, [filteredCalls, showToast, t])
 
   // ---------------------------------------------------------------------------
   // File upload + analysis
@@ -297,12 +313,12 @@ export default function Page() {
       console.log(`[Rafeeq] Total transcripts to analyse: ${transcripts.length}`)
 
       if (transcripts.length === 0) {
-        showToast("No transcripts found — check the browser console (F12) for details")
+        showToast(t("ci.noTranscripts"))
         return
       }
 
       setAnalysing(true)
-      showToast(`Analysing ${transcripts.length} transcript${transcripts.length !== 1 ? "s" : ""}…`)
+      showToast(t("ci.analysing", { n: transcripts.length }))
 
       try {
         const newCalls: CallRecord[] = []
@@ -320,15 +336,15 @@ export default function Page() {
           }
         }
         setCalls((prev) => [...newCalls, ...prev])
-        showToast(`Added ${newCalls.length} analysed call${newCalls.length !== 1 ? "s" : ""}`)
+        showToast(t("ci.added", { n: newCalls.length }))
       } catch (err) {
         console.error(err)
-        showToast("Analysis failed — is the backend running on port 8000?")
+        showToast(t("ci.analysisFailed"))
       } finally {
         setAnalysing(false)
       }
     },
-    [showToast],
+    [showToast, t],
   )
 
   return (
@@ -336,7 +352,7 @@ export default function Page() {
       <Sidebar />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar search={search} onSearch={setSearch} />
+        <Topbar title={t("nav.callIntelligence")} search={search} onSearch={setSearch} />
 
         <main className="flex flex-1 flex-col gap-6 p-4 md:p-6">
           <HeroBanner onUpload={() => fileInputRef.current?.click()} />
@@ -349,7 +365,8 @@ export default function Page() {
             onChange={onFilesSelected}
           />
 
-          <div className="flex justify-end">
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <GlobalTimeRange className="lg:hidden" />
             <RefreshStatus lastUpdated={lastUpdated} refreshing={refreshing} onRefresh={() => loadData(true)} />
           </div>
 
@@ -360,26 +377,26 @@ export default function Page() {
           {/* Stat cards — all derived from real calls */}
           <div id="pipeline" className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <StatCard
-              label="Total Calls Analyzed"
+              label={t("ci.statTotal")}
               value={stats.total > 0 ? stats.total.toLocaleString() : "0"}
               trend="neutral"
               icon={PhoneCall}
             />
             <StatCard
-              label="Average Call Duration"
+              label={t("ci.statAvgDuration")}
               value={stats.avgDuration}
               trend="neutral"
               icon={Clock}
             />
             <StatCard
-              label="Negative Sentiment Rate"
+              label={t("ci.statNegRate")}
               value={stats.negativeRate}
               trend="neutral"
               icon={Frown}
             />
             <StatCard
-              label="Top Issue Category"
-              value={stats.topCategory}
+              label={t("ci.statTopCategory")}
+              value={tv(stats.topCategory)}
               trend="neutral"
               icon={Flame}
             />
@@ -399,29 +416,29 @@ export default function Page() {
           </div>
 
           <div id="coverage">
-            <QatarMap calls={calls} />
+            <QatarMap calls={scopedCalls} />
           </div>
 
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-[2fr_1fr]">
             <div className="flex min-w-0 flex-col gap-6">
               <CallTable calls={filteredCalls} activeLabel={intentFilter} />
-              <SentimentTrend calls={calls} />
+              <SentimentTrend calls={scopedCalls} />
             </div>
             <div id="intents" className="flex min-w-0 flex-col gap-6">
-              <ToneChart calls={calls} />
-              <IntentPanel calls={calls} selected={intentFilter} onSelect={setIntentFilter} />
-              <CategoryBreakdown calls={calls} />
+              <ToneChart calls={scopedCalls} />
+              <IntentPanel calls={scopedCalls} selected={intentFilter} onSelect={setIntentFilter} />
+              <CategoryBreakdown calls={scopedCalls} />
             </div>
           </div>
 
           <div id="reports" className="min-w-0">
-            <TopTopics calls={calls} />
+            <TopTopics calls={scopedCalls} />
           </div>
           </>
           )}
 
           <footer className="pb-4 pt-2 text-center text-xs text-muted-foreground">
-            Rafeeq Call Intelligence · All Daily Needs. One Rafeeq.
+            {t("ci.footer")}
           </footer>
         </main>
       </div>

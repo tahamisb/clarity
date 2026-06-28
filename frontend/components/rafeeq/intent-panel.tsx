@@ -3,6 +3,7 @@
 import { useMemo } from "react"
 import { cn } from "@/lib/utils"
 import { type CallRecord } from "@/lib/rafeeq-data"
+import { useT, useTV } from "@/lib/i18n"
 import { Panel } from "./panel"
 
 export function IntentPanel({
@@ -14,6 +15,8 @@ export function IntentPanel({
   selected: string | null
   onSelect: (intent: string | null) => void
 }) {
+  const t = useT()
+  const tv = useTV()
   const intents = useMemo(() => {
     const map: Record<string, { count: number; sentimentSum: number }> = {}
     for (const c of calls) {
@@ -40,17 +43,17 @@ export function IntentPanel({
       onClick={() => onSelect(null)}
       className="text-xs font-semibold text-accent hover:underline"
     >
-      Clear filter
+      {t("intent.clearFilter")}
     </button>
   ) : (
-    <span className="text-xs text-muted-foreground">Click to filter calls</span>
+    <span className="text-xs text-muted-foreground">{t("intent.clickToFilter")}</span>
   )
 
   return (
-    <Panel title="Intent Classification" action={actionSlot}>
+    <Panel title={t("chart.intentClassification")} action={actionSlot}>
       {calls.length === 0 ? (
         <div className="flex h-24 items-center justify-center text-xs text-muted-foreground">
-          Upload transcripts to see intent breakdown
+          {t("chart.uploadForIntent")}
         </div>
       ) : (
         <ul className="space-y-2.5">
@@ -74,7 +77,7 @@ export function IntentPanel({
                   )}
                 >
                   <div className="flex items-center justify-between text-sm">
-                    <span className="font-medium text-foreground">{intent.name}</span>
+                    <span className="font-medium text-foreground">{tv(intent.name)}</span>
                     <span className="tabular-nums text-muted-foreground">{intent.pct}%</span>
                   </div>
                   <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-secondary">
@@ -85,11 +88,11 @@ export function IntentPanel({
                   </div>
                   <div className="mt-1 flex items-center justify-between text-[11px]">
                     <span className="tabular-nums text-muted-foreground">
-                      {intent.value.toLocaleString()} calls
+                      {intent.value.toLocaleString()} {t("unit.calls")}
                     </span>
                     <span className={cn("font-semibold tabular-nums", sentColor)}>
                       {intent.avgSentiment > 0 ? "+" : ""}
-                      {intent.avgSentiment.toFixed(2)} tone
+                      {intent.avgSentiment.toFixed(2)} {t("intent.tone")}
                     </span>
                   </div>
                 </button>

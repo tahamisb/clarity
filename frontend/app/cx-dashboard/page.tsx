@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useCallback, useEffect, useMemo, useState } from "react"
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Activity, Ban, Clock, Bot,
   TrendingUp, TrendingDown, AlertTriangle, ArrowRight, HeartPulse, ShieldAlert
@@ -12,6 +12,9 @@ import { CxDashboardLoading } from "@/components/rafeeq/loading-screen"
 import { RefreshStatus } from "@/components/rafeeq/refresh-status"
 import { WorkInProgress, WipBadge } from "@/components/rafeeq/work-in-progress"
 import { useAutoRefresh } from "@/lib/settings-context"
+import { useTimeFilter } from "@/lib/time-filter-context"
+import { filterByRange, type TimeRange } from "@/lib/time-range"
+import { useT, useTV } from "@/lib/i18n"
 import {
   LineChart, Line, AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, ReferenceLine
@@ -21,7 +24,7 @@ import { cn } from "@/lib/utils"
 
 import {
   fetchCalls, fetchAllMessagesData, fetchCancelTrend, fetchCancelByZone,
-  fetchFeatureImportance, fetchCancelByActor,
+  fetchFeatureImportance, fetchCancelByActor, clearServerCache,
   type TriggerItem, type TrendItem, type CancelTrend, type CancelByZone,
   type FeatureImportance, type ActorRow,
 } from "@/lib/api"
@@ -42,6 +45,15 @@ const WEEK_MS = 7 * 24 * 60 * 60 * 1000
 
 function cleanFeature(name: string) {
   return name.replace(/^num__|^cat__/, "").replace(/_/g, " ")
+}
+
+// Zone names come back long ("Zone 14 Al Souq and Old Doha"); collapse them to
+// the "Zone N" prefix (or a truncated form) so the vertical bar-chart axis labels
+// stay on one line. The full name remains visible in the tooltip.
+function shortZoneLabel(zone: string): string {
+  const match = zone.match(/^Zone\s+\d+/i)
+  if (match) return match[0]
+  return zone.length > 12 ? `${zone.slice(0, 11)}…` : zone
 }
 
 // Bucket calls into weekly groups (last 12), counting category volume + sentiment.
@@ -66,6 +78,8 @@ function weeklyFromCalls(calls: CallRecord[]) {
 }
 
 export default function CxDashboardPage() {
+  const t = useT()
+  const tv = useTV()
   const [search, setSearch] = useState("")
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -81,28 +95,32 @@ export default function CxDashboardPage() {
   const [featImp, setFeatImp] = useState<FeatureImportance | null>(null)
   const [cancelActors, setCancelActors] = useState<ActorRow[] | null>(null)
 
-  // Global filters (visual scope selectors)
-  const [dateFilter, setDateFilter] = useState("Last 4 weeks")
+  // App-wide time-range filter. Calls/messages carry per-record dates (filtered
+  // client-side); the cancellation aggregates are re-queried server-side.
+  const { range, queryKey } = useTimeFilter()
+
+  // Secondary scope selectors (visual placeholders, unchanged).
   const [zoneFilter, setZoneFilter] = useState("All Zones")
   const [categoryFilter, setCategoryFilter] = useState("All Categories")
 
   const resetFilters = () => {
-    setDateFilter("Last 4 weeks")
     setZoneFilter("All Zones")
     setCategoryFilter("All Categories")
   }
 
-  const loadData = useCallback((background = false) => {
+  const loadData = useCallback((r: TimeRange, background = false) => {
     if (background) setRefreshing(true)
     else setLoading(true)
-    Promise.all([
+    // A refresh re-reads from BigQuery; bust the server cache first so it does.
+    const ready = background ? clearServerCache() : Promise.resolve()
+    ready.then(() => Promise.all([
       fetchCalls(),
-      fetchAllMessagesData(),
-      fetchCancelTrend(),
-      fetchCancelByZone(),
+      fetchAllMessagesData(r),
+      fetchCancelTrend(r),
+      fetchCancelByZone(r),
       fetchFeatureImportance(),
-      fetchCancelByActor(),
-    ]).then(([callsData, msgs, cTrend, cZones, fImp, actors]) => {
+      fetchCancelByActor(r),
+    ])).then(([callsData, msgs, cTrend, cZones, fImp, actors]) => {
       setCalls(callsData ?? [])
       setMessages(msgs.messages ?? [])
       setTriggers(msgs.triggers ?? [])
@@ -117,39 +135,59 @@ export default function CxDashboardPage() {
     })
   }, [])
 
+  // Initial load (full skeleton) once.
   useEffect(() => {
-    loadData(false)
-  }, [loadData])
+    loadData(range, false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
-  useAutoRefresh(() => loadData(true))
+  // Re-query server-aggregated panels in the background when the window changes.
+  const firstRange = useRef(true)
+  useEffect(() => {
+    if (firstRange.current) { firstRange.current = false; return }
+    loadData(range, true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queryKey])
+
+  useAutoRefresh(() => loadData(range, true))
+
+  // Client-side date scoping for the record-level sources.
+  const scopedCalls = useMemo(
+    () => filterByRange(calls, range, (c) => c.datetime),
+    [calls, range],
+  )
+  const scopedMessages = useMemo(
+    () => filterByRange(messages, range, (m) => m.date),
+    [messages, range],
+  )
 
   // -------------------------------------------------------------------------
   // Derived sentiment counts (calls + messages)
   // -------------------------------------------------------------------------
   const sentimentCounts = useMemo(() => {
     let pos = 0, neu = 0, neg = 0
-    for (const c of calls) {
+    for (const c of scopedCalls) {
       if (c.sentiment === "Positive") pos++
       else if (c.sentiment === "Neutral") neu++
       else neg++
     }
-    for (const m of messages) {
+    for (const m of scopedMessages) {
       if (m.sentiment === "Positive") pos++
       else if (m.sentiment === "Neutral") neu++
       else neg++
     }
     return { pos, neu, neg, total: pos + neu + neg }
-  }, [calls, messages])
+  }, [scopedCalls, scopedMessages])
 
   const msgSentimentCounts = useMemo(() => {
     let pos = 0, neu = 0, neg = 0
-    for (const m of messages) {
+    for (const m of scopedMessages) {
       if (m.sentiment === "Positive") pos++
       else if (m.sentiment === "Neutral") neu++
       else neg++
     }
     return { pos, neu, neg }
-  }, [messages])
+  }, [scopedMessages])
 
   // Overall sentiment score out of 10 (positive=10, neutral=5, negative=0)
   const sentimentScore = useMemo(() => {
@@ -168,15 +206,15 @@ export default function CxDashboardPage() {
 
   // Escalation proxy: share of calls categorised as Complaints
   const escalationRate = useMemo(() => {
-    if (!calls.length) return null
-    const complaints = calls.filter((c) => c.category === "Complaints").length
-    return (complaints / calls.length) * 100
-  }, [calls])
+    if (!scopedCalls.length) return null
+    const complaints = scopedCalls.filter((c) => c.category === "Complaints").length
+    return (complaints / scopedCalls.length) * 100
+  }, [scopedCalls])
 
   // -------------------------------------------------------------------------
   // Calls panel
   // -------------------------------------------------------------------------
-  const callWeeks = useMemo(() => weeklyFromCalls(calls), [calls])
+  const callWeeks = useMemo(() => weeklyFromCalls(scopedCalls), [scopedCalls])
   const weeklyCallsVolume = useMemo(
     () => callWeeks.map((w) => ({ week: w.week, billing: w.billing, technical: w.technical, complaints: w.complaints })),
     [callWeeks],
@@ -187,7 +225,7 @@ export default function CxDashboardPage() {
   )
   const topComplaints = useMemo(() => {
     const counts: Record<string, number> = {}
-    for (const c of calls) {
+    for (const c of scopedCalls) {
       if (c.sentiment !== "Negative") continue
       counts[c.intent] = (counts[c.intent] ?? 0) + 1
     }
@@ -195,14 +233,14 @@ export default function CxDashboardPage() {
     if (!entries.length) {
       // Fall back to overall intent volume if there are no negatives.
       const all: Record<string, number> = {}
-      for (const c of calls) all[c.intent] = (all[c.intent] ?? 0) + 1
+      for (const c of scopedCalls) all[c.intent] = (all[c.intent] ?? 0) + 1
       entries = Object.entries(all)
     }
     return entries
       .sort((a, b) => b[1] - a[1])
       .slice(0, 3)
       .map(([name, count], i) => ({ rank: i + 1, name, count, trend: i < 2 ? "up" : "down" }))
-  }, [calls])
+  }, [scopedCalls])
 
   // -------------------------------------------------------------------------
   // Text sentiment panel
@@ -228,12 +266,12 @@ export default function CxDashboardPage() {
   }, [msgSentimentCounts])
 
   const sentimentInsight = useMemo(() => {
-    if (!msgTrend.length) return "Not enough message data yet to surface a sentiment insight."
+    if (!msgTrend.length) return t("cx.sentimentInsightEmpty")
     const worst = msgTrend.reduce((a, b, i) => (b.negative > msgTrend[a].negative ? i : a), 0)
     const topTrigger = triggers[0]?.trigger
-    const base = `Negative sentiment peaks in W${worst + 1} at ${msgTrend[worst].negative}%.`
-    return topTrigger ? `${base} Leading driver: ${topTrigger}.` : base
-  }, [msgTrend, triggers])
+    const base = t("cx.sentimentInsight", { week: worst + 1, pct: msgTrend[worst].negative })
+    return topTrigger ? base + t("cx.sentimentInsightDriver", { trigger: topTrigger }) : base
+  }, [msgTrend, triggers, t])
 
   // -------------------------------------------------------------------------
   // Cancellations panel
@@ -266,10 +304,10 @@ export default function CxDashboardPage() {
   }, [cancelZones])
 
   const cancellationInsight = useMemo(() => {
-    if (!cancellationZones.length) return "Not enough cancellation data yet to surface a zone insight."
+    if (!cancellationZones.length) return t("cx.cancelInsightEmpty")
     const top = cancellationZones[0]
-    return `${top.zone} has the highest cancellation rate at ${top.rate}%.`
-  }, [cancellationZones])
+    return t("cx.cancelInsight", { zone: top.zone, rate: top.rate })
+  }, [cancellationZones, t])
 
   // -------------------------------------------------------------------------
   // Weekly CX health score (derived from real sentiment + cancellation signals)
@@ -278,17 +316,17 @@ export default function CxDashboardPage() {
     const sentimentPts = Math.round((sentimentScore / 10) * 50)
     const cancelPts = Math.round((1 - Math.min(cancellationRate / 20, 1)) * 50)
     const score = sentimentPts + cancelPts
-    const label = score >= 75 ? "GOOD" : score >= 50 ? "FAIR" : "POOR"
+    const label = score >= 75 ? t("cx.healthGood") : score >= 50 ? t("cx.healthFair") : t("cx.healthPoor")
     const tone = score >= 75 ? "positive" : score >= 50 ? "neutral" : "destructive"
     const components = [
-      { name: "Sentiment (50%)", score: sentimentPts },
-      { name: "Cancellations (50%)", score: cancelPts },
+      { name: t("cx.compSentiment"), score: sentimentPts },
+      { name: t("cx.compCancellations"), score: cancelPts },
     ]
     const trend = weeklySentimentScore.slice(-8).map((w) => ({ week: w.week, score: Math.round(w.score * 10) }))
     return { score, label, tone, components, trend }
-  }, [sentimentScore, cancellationRate, weeklySentimentScore])
+  }, [sentimentScore, cancellationRate, weeklySentimentScore, t])
 
-  const totalInteractions = calls.length + messages.length
+  const totalInteractions = scopedCalls.length + scopedMessages.length
 
   // Custom tooltip
   const CustomTooltip = ({ active, payload, label }: any) => {
@@ -313,7 +351,7 @@ export default function CxDashboardPage() {
       <Sidebar />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar title="CX Analytics Dashboard" search={search} onSearch={setSearch} />
+        <Topbar title={t("cx.title")} search={search} onSearch={setSearch} />
 
         <main className="flex flex-1 flex-col gap-6 p-4 md:p-6">
 
@@ -321,70 +359,55 @@ export default function CxDashboardPage() {
           <div className="flex flex-col items-start gap-3 border-b border-border pb-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
-                CX Analytics Dashboard
+                {t("cx.title")}
               </h1>
               <p className="text-sm text-muted-foreground">
-                Single source of truth for overall Customer Experience health across calls, text, and bot channels.
+                {t("cx.subtitle")}
               </p>
             </div>
-            <RefreshStatus lastUpdated={lastUpdated} refreshing={refreshing} onRefresh={() => loadData(true)} />
+            <RefreshStatus lastUpdated={lastUpdated} refreshing={refreshing} onRefresh={() => loadData(range, true)} />
           </div>
 
           {loading ? (
             <CxDashboardLoading />
           ) : (
           <>
-          {/* Global Filter Bar */}
+          {/* Filter Bar — zone and category scope selectors. */}
           <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex flex-wrap gap-3">
-              <select
-                className="rounded-lg border border-border bg-background px-3 py-1.5 text-sm font-medium text-foreground outline-none focus:ring-2 focus:ring-primary/50"
-                value={dateFilter} onChange={(e) => setDateFilter(e.target.value)}
-              >
-                <option>Last 7 days</option>
-                <option>Last 4 weeks</option>
-                <option>Last 3 months</option>
-                <option>Custom</option>
-              </select>
+            <div className="flex flex-wrap items-center gap-3">
               <select
                 className="rounded-lg border border-border bg-background px-3 py-1.5 text-sm font-medium text-foreground outline-none focus:ring-2 focus:ring-primary/50"
                 value={zoneFilter} onChange={(e) => setZoneFilter(e.target.value)}
               >
-                <option>All Zones</option>
-                <option>Al Rayyan</option>
-                <option>West Bay</option>
-                <option>Al Wakra</option>
-                <option>Lusail</option>
-                <option>Al Khor</option>
-                <option>Al Daayen</option>
+                {["All Zones", "Al Rayyan", "West Bay", "Al Wakra", "Lusail", "Al Khor", "Al Daayen"].map((z) => (
+                  <option key={z} value={z}>{tv(z)}</option>
+                ))}
               </select>
               <select
                 className="rounded-lg border border-border bg-background px-3 py-1.5 text-sm font-medium text-foreground outline-none focus:ring-2 focus:ring-primary/50"
                 value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}
               >
-                <option>All Categories</option>
-                <option>Restaurant</option>
-                <option>Grocery</option>
-                <option>Pharmacy</option>
-                <option>Dark Kitchen</option>
+                {["All Categories", "Restaurant", "Grocery", "Pharmacy", "Dark Kitchen"].map((c) => (
+                  <option key={c} value={c}>{tv(c)}</option>
+                ))}
               </select>
             </div>
             <button
               onClick={resetFilters}
               className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
             >
-              Reset Filters
+              {t("cx.resetFilters")}
             </button>
           </div>
 
           {/* Summary KPI Strip */}
           <div className="grid grid-cols-2 gap-4 xl:grid-cols-6">
-            <StatCard label="Total Interactions" value={totalInteractions.toLocaleString()} trend="neutral" icon={Activity} />
-            <StatCard label="Overall Sentiment" value={`${sentimentScore.toFixed(1)}/10`} trend="neutral" icon={HeartPulse} />
-            <StatCard label="Cancellation Rate" value={`${cancellationRate.toFixed(1)}%`} trend="neutral" icon={Ban} />
-            <StatCard label="Avg Resolution Time" value="—" trend="neutral" icon={Clock} />
-            <StatCard label="Bot Containment" value="—" trend="neutral" icon={Bot} />
-            <StatCard label="Escalation Rate" value={escalationRate === null ? "—" : `${escalationRate.toFixed(1)}%`} trend="neutral" icon={AlertTriangle} />
+            <StatCard label={t("cx.totalInteractions")} value={totalInteractions.toLocaleString()} trend="neutral" icon={Activity} />
+            <StatCard label={t("cx.overallSentiment")} value={`${sentimentScore.toFixed(1)}/10`} trend="neutral" icon={HeartPulse} />
+            <StatCard label={t("cx.cancellationRate")} value={`${cancellationRate.toFixed(1)}%`} trend="neutral" icon={Ban} />
+            <StatCard label={t("cx.avgResolution")} value="—" trend="neutral" icon={Clock} />
+            <StatCard label={t("cx.botContainment")} value="—" trend="neutral" icon={Bot} />
+            <StatCard label={t("cx.escalationRate")} value={escalationRate === null ? "—" : `${escalationRate.toFixed(1)}%`} trend="neutral" icon={AlertTriangle} />
           </div>
 
           {/* Grid Layout for Panels */}
@@ -393,16 +416,16 @@ export default function CxDashboardPage() {
             {/* CALLS PANEL */}
             <div className="flex flex-col rounded-xl border border-border bg-card p-5 shadow-sm">
               <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-lg font-bold text-foreground">Call Intelligence</h2>
+                <h2 className="text-lg font-bold text-foreground">{t("nav.callIntelligence")}</h2>
                 <Link href="/" className="group flex items-center gap-1 text-xs font-semibold text-primary transition-colors hover:text-primary/80">
-                  View Full Call Report <ArrowRight className="size-3 transition-transform group-hover:translate-x-1" />
+                  {t("cx.viewFullCall")} <ArrowRight className="size-3 transition-transform group-hover:translate-x-1 rtl:-scale-x-100" />
                 </Link>
               </div>
 
               <div className="grid flex-1 grid-cols-1 gap-6 lg:grid-cols-[1.5fr_1fr]">
                 <div className="flex flex-col gap-4">
                   <div className="h-[160px] w-full">
-                    {weeklyCallsVolume.length === 0 ? <EmptyChart label="No call data" /> : (
+                    {weeklyCallsVolume.length === 0 ? <EmptyChart label={t("empty.noCallData")} /> : (
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart data={weeklyCallsVolume} margin={{ top: 0, right: 0, bottom: 0, left: -20 }}>
                         <defs>
@@ -427,7 +450,7 @@ export default function CxDashboardPage() {
                     )}
                   </div>
                   <div className="h-[120px] w-full">
-                    {weeklyCallSentiment.length === 0 ? <EmptyChart label="No call data" /> : (
+                    {weeklyCallSentiment.length === 0 ? <EmptyChart label={t("empty.noCallData")} /> : (
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={weeklyCallSentiment} margin={{ top: 0, right: 0, bottom: 0, left: -20 }}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
@@ -444,17 +467,17 @@ export default function CxDashboardPage() {
                 </div>
 
                 <div className="flex flex-col gap-3">
-                  <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Top Complaints</h3>
+                  <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">{t("cx.topComplaints")}</h3>
                   {topComplaints.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">No call data yet.</p>
+                    <p className="text-xs text-muted-foreground">{t("cx.noCallData")}</p>
                   ) : topComplaints.map(comp => (
                     <div key={comp.rank} className="flex items-center gap-3 rounded-lg border border-border bg-sidebar p-3">
                       <div className="flex size-6 items-center justify-center rounded-full bg-primary/20 text-xs font-bold text-primary">
                         {comp.rank}
                       </div>
                       <div className="flex-1">
-                        <div className="text-sm font-semibold text-foreground">{comp.name}</div>
-                        <div className="text-xs text-muted-foreground">{comp.count} calls</div>
+                        <div className="text-sm font-semibold text-foreground">{tv(comp.name)}</div>
+                        <div className="text-xs text-muted-foreground">{comp.count} {t("unit.calls")}</div>
                       </div>
                       {comp.trend === "up" ? <TrendingUp className="size-4 text-destructive" /> : <TrendingDown className="size-4 text-positive" />}
                     </div>
@@ -466,29 +489,29 @@ export default function CxDashboardPage() {
             {/* SENTIMENT PANEL */}
             <div className="flex flex-col rounded-xl border border-border bg-card p-5 shadow-sm">
               <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-lg font-bold text-foreground">Text Sentiment</h2>
+                <h2 className="text-lg font-bold text-foreground">{t("cx.textSentiment")}</h2>
                 <Link href="/messages" className="group flex items-center gap-1 text-xs font-semibold text-primary transition-colors hover:text-primary/80">
-                  View Full Sentiment Report <ArrowRight className="size-3 transition-transform group-hover:translate-x-1" />
+                  {t("cx.viewFullSentiment")} <ArrowRight className="size-3 transition-transform group-hover:translate-x-1 rtl:-scale-x-100" />
                 </Link>
               </div>
 
               <div className="grid flex-1 grid-cols-1 gap-6 lg:grid-cols-2">
                 <div className="flex flex-col gap-4">
                   <div className="h-[120px] w-full">
-                    {weeklySentimentScore.length === 0 ? <EmptyChart label="No sentiment trend" /> : (
+                    {weeklySentimentScore.length === 0 ? <EmptyChart label={t("empty.noSentimentTrend")} /> : (
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={weeklySentimentScore} margin={{ top: 5, right: 0, bottom: 0, left: -30 }}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
                         <XAxis dataKey="week" stroke="var(--muted-foreground)" fontSize={11} tickLine={false} axisLine={false} />
                         <YAxis domain={[0, 10]} stroke="var(--muted-foreground)" fontSize={11} tickLine={false} axisLine={false} />
                         <RechartsTooltip content={<CustomTooltip />} />
-                        <Line type="monotone" dataKey="score" name="Weekly Score" stroke="var(--primary)" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+                        <Line type="monotone" dataKey="score" name={t("cx.overallSentiment")} stroke="var(--primary)" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 5 }} />
                       </LineChart>
                     </ResponsiveContainer>
                     )}
                   </div>
                   <div className="h-[160px] w-full">
-                    {topNegativeTopics.length === 0 ? <EmptyChart label="No negative topics" /> : (
+                    {topNegativeTopics.length === 0 ? <EmptyChart label={t("empty.noNegativeTopics")} /> : (
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={topNegativeTopics} layout="vertical" margin={{ top: 0, right: 10, left: 20, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--border)" />
@@ -504,7 +527,7 @@ export default function CxDashboardPage() {
 
                 <div className="flex flex-col gap-4">
                   <div className="flex h-[150px] w-full items-center justify-center relative">
-                    {sentimentSplit.length === 0 ? <EmptyChart label="No messages" /> : (
+                    {sentimentSplit.length === 0 ? <EmptyChart label={t("empty.noMessages")} /> : (
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
                         <Pie
@@ -524,7 +547,7 @@ export default function CxDashboardPage() {
                     )}
                   </div>
                   <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-xs leading-relaxed text-foreground">
-                    <span className="font-semibold text-primary block mb-1">AI Insight</span>
+                    <span className="font-semibold text-primary block mb-1">{t("common.aiInsight")}</span>
                     {sentimentInsight}
                   </div>
                 </div>
@@ -534,33 +557,33 @@ export default function CxDashboardPage() {
             {/* CANCELLATIONS PANEL */}
             <div className="flex flex-col rounded-xl border border-border bg-card p-5 shadow-sm">
               <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-lg font-bold text-foreground">Cancellation Intelligence</h2>
+                <h2 className="text-lg font-bold text-foreground">{t("cancel.title")}</h2>
                 <Link href="/cancellations" className="group flex items-center gap-1 text-xs font-semibold text-primary transition-colors hover:text-primary/80">
-                  View Full Cancellation Report <ArrowRight className="size-3 transition-transform group-hover:translate-x-1" />
+                  {t("cx.viewFullCancellation")} <ArrowRight className="size-3 transition-transform group-hover:translate-x-1 rtl:-scale-x-100" />
                 </Link>
               </div>
 
               <div className="grid flex-1 grid-cols-1 gap-6 lg:grid-cols-[1fr_1fr]">
                 <div className="flex flex-col gap-4">
                   <div className="h-[120px] w-full">
-                    {weeklyCancellations.length === 0 ? <EmptyChart label="No cancellation trend" /> : (
+                    {weeklyCancellations.length === 0 ? <EmptyChart label={t("empty.noCancellationTrend")} /> : (
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={weeklyCancellations} margin={{ top: 5, right: 0, bottom: 0, left: -20 }}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
                         <XAxis dataKey="week" stroke="var(--muted-foreground)" fontSize={11} tickLine={false} axisLine={false} />
                         <YAxis stroke="var(--muted-foreground)" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v) => `${v}%`} />
                         <RechartsTooltip content={<CustomTooltip />} />
-                        <Line type="monotone" dataKey="rate" name="Cancel Rate" stroke="var(--chart-4)" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+                        <Line type="monotone" dataKey="rate" name={t("cx.cancellationRate")} stroke="var(--chart-4)" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 5 }} />
                       </LineChart>
                     </ResponsiveContainer>
                     )}
                   </div>
                   <div className="flex flex-col gap-2">
                     {topCancellationDrivers.length === 0 ? (
-                      <p className="text-xs text-muted-foreground">Train the model or load cancellation data to see drivers.</p>
+                      <p className="text-xs text-muted-foreground">{t("cx.trainModelDrivers")}</p>
                     ) : topCancellationDrivers.map((driver, i) => (
                       <div key={i} className="flex items-center justify-between rounded bg-muted/30 px-3 py-2 text-sm">
-                        <span className="font-medium text-foreground">{driver.name}</span>
+                        <span className="font-medium text-foreground">{tv(driver.name)}</span>
                         <span className="text-xs font-semibold text-muted-foreground">{driver.percentage}%</span>
                       </div>
                     ))}
@@ -568,13 +591,13 @@ export default function CxDashboardPage() {
                 </div>
 
                 <div className="flex flex-col gap-4">
-                  <div className="h-[150px] w-full">
-                    {cancellationZones.length === 0 ? <EmptyChart label="No zone data" /> : (
+                  <div className="h-[190px] w-full">
+                    {cancellationZones.length === 0 ? <EmptyChart label={t("empty.noZoneData")} /> : (
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={cancellationZones} layout="vertical" margin={{ top: 0, right: 10, left: 20, bottom: 0 }}>
+                      <BarChart data={cancellationZones} layout="vertical" margin={{ top: 0, right: 10, left: 8, bottom: 0 }} barCategoryGap="25%">
                         <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--border)" />
                         <XAxis type="number" hide />
-                        <YAxis dataKey="zone" type="category" stroke="var(--muted-foreground)" fontSize={11} tickLine={false} axisLine={false} width={60} />
+                        <YAxis dataKey="zone" type="category" stroke="var(--muted-foreground)" fontSize={11} tickLine={false} axisLine={false} width={64} interval={0} tickFormatter={shortZoneLabel} />
                         <RechartsTooltip cursor={{ fill: 'var(--muted)', opacity: 0.5 }} content={<CustomTooltip />} />
                         <Bar dataKey="rate" radius={[0, 4, 4, 0]} barSize={12}>
                           {cancellationZones.map((entry, index) => (
@@ -586,7 +609,7 @@ export default function CxDashboardPage() {
                     )}
                   </div>
                   <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-xs leading-relaxed text-foreground">
-                    <span className="font-semibold text-primary block mb-1">AI Insight</span>
+                    <span className="font-semibold text-primary block mb-1">{t("common.aiInsight")}</span>
                     {cancellationInsight}
                   </div>
                 </div>
@@ -596,11 +619,11 @@ export default function CxDashboardPage() {
             {/* RESOLUTION TIME PANEL — no resolution-time data source yet */}
             <div className="flex flex-col rounded-xl border border-border bg-card p-5 shadow-sm">
               <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-lg font-bold text-foreground">Resolution Time</h2>
+                <h2 className="text-lg font-bold text-foreground">{t("cx.resolutionTime")}</h2>
                 <WipBadge />
               </div>
 
-              <WorkInProgress note="Resolution-time tracking needs per-ticket open/close timestamps, which aren't ingested yet.">
+              <WorkInProgress note={t("cx.resolutionWip")} label={t("common.workInProgress")}>
               <div className="grid flex-1 grid-cols-1 gap-6 lg:grid-cols-[1fr_1.5fr]">
                 <div className="flex flex-col gap-4">
                   <div className="h-[180px] w-full">
@@ -610,7 +633,7 @@ export default function CxDashboardPage() {
                         <XAxis dataKey="week" stroke="var(--muted-foreground)" fontSize={11} tickLine={false} axisLine={false} />
                         <YAxis stroke="var(--muted-foreground)" fontSize={11} tickLine={false} axisLine={false} />
                         <RechartsTooltip cursor={{ fill: 'var(--muted)', opacity: 0.5 }} content={<CustomTooltip />} />
-                        <ReferenceLine y={4} stroke="var(--chart-4)" strokeDasharray="3 3" label={{ position: 'top', value: '4h SLA', fill: 'var(--chart-4)', fontSize: 10 }} />
+                        <ReferenceLine y={4} stroke="var(--chart-4)" strokeDasharray="3 3" label={{ position: 'top', value: t("cx.slaRef", { n: 4 }), fill: 'var(--chart-4)', fontSize: 10 }} />
                         <Bar dataKey="hours" radius={[4, 4, 0, 0]} barSize={16}>
                           {weeklyResolutionTime.map((entry, index) => (
                             <Cell key={`cell-${index}`} fill={entry.hours > 4 ? "var(--destructive)" : "var(--positive)"} />
@@ -625,9 +648,9 @@ export default function CxDashboardPage() {
                   <table className="w-full text-left text-xs">
                     <thead className="bg-muted/50 text-muted-foreground">
                       <tr>
-                        <th className="px-3 py-2 font-semibold">Issue Type</th>
-                        <th className="px-3 py-2 font-semibold">Avg Time</th>
-                        <th className="px-3 py-2 font-semibold text-center">SLA Status</th>
+                        <th className="px-3 py-2 font-semibold">{t("col.issueType")}</th>
+                        <th className="px-3 py-2 font-semibold">{t("col.avgTime")}</th>
+                        <th className="px-3 py-2 font-semibold text-center">{t("col.slaStatus")}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
@@ -658,33 +681,33 @@ export default function CxDashboardPage() {
             {/* CHATBOT PERFORMANCE PANEL (Spans full width) — no bot telemetry yet */}
             <div className="flex flex-col rounded-xl border border-border bg-card p-5 shadow-sm xl:col-span-2">
               <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-lg font-bold text-foreground">Chatbot Summary</h2>
+                <h2 className="text-lg font-bold text-foreground">{t("cx.chatbotSummary")}</h2>
                 <WipBadge />
               </div>
 
-              <WorkInProgress note="Chatbot containment, fallback and unanswered-question analytics need the bot conversation logs, which aren't connected yet.">
+              <WorkInProgress note={t("cx.chatbotWip")} label={t("common.workInProgress")}>
               <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_1.5fr_1fr]">
                 <div className="grid grid-cols-2 gap-3">
                   <div className="flex flex-col justify-center rounded-lg border border-border bg-sidebar p-3 text-center">
-                    <span className="text-xs text-muted-foreground mb-1">Containment Rate</span>
+                    <span className="text-xs text-muted-foreground mb-1">{t("cx.containmentRate")}</span>
                     <span className="text-xl font-bold text-foreground">{chatbotStats.containmentRate}%</span>
                   </div>
                   <div className="flex flex-col justify-center rounded-lg border border-border bg-sidebar p-3 text-center">
-                    <span className="text-xs text-muted-foreground mb-1">Fallback Rate</span>
+                    <span className="text-xs text-muted-foreground mb-1">{t("cx.fallbackRate")}</span>
                     <span className="text-xl font-bold text-destructive">{chatbotStats.fallbackRate}%</span>
                   </div>
                   <div className="flex flex-col justify-center rounded-lg border border-border bg-sidebar p-3 text-center">
-                    <span className="text-xs text-muted-foreground mb-1">Avg Bot Turns</span>
+                    <span className="text-xs text-muted-foreground mb-1">{t("cx.avgBotTurns")}</span>
                     <span className="text-xl font-bold text-foreground">{chatbotStats.avgBotTurns}</span>
                   </div>
                   <div className="flex flex-col justify-center rounded-lg border border-border bg-sidebar p-3 text-center">
-                    <span className="text-xs text-muted-foreground mb-1">Top Unanswered</span>
+                    <span className="text-xs text-muted-foreground mb-1">{t("cx.topUnanswered")}</span>
                     <span className="text-sm font-bold text-foreground truncate px-1" title={chatbotStats.topUnanswered}>{chatbotStats.topUnanswered}</span>
                   </div>
                 </div>
 
                 <div className="flex flex-col">
-                  <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">Top Unanswered Questions</h3>
+                  <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">{t("cx.topUnansweredQuestions")}</h3>
                   <div className="flex flex-col gap-2">
                     {topUnansweredQuestions.map(q => (
                       <div key={q.rank} className="flex items-center gap-3 rounded bg-muted/30 px-3 py-2 text-sm">
@@ -710,8 +733,8 @@ export default function CxDashboardPage() {
                     </ResponsiveContainer>
                   </div>
                   <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-xs leading-relaxed text-foreground">
-                    <span className="font-semibold text-primary block mb-1">AI Insight</span>
-                    41% of escalations happen within the first 2 bot turns — customers are bypassing the menu. An LLM-powered bot layer could contain an estimated 30% more chats.
+                    <span className="font-semibold text-primary block mb-1">{t("common.aiInsight")}</span>
+                    {t("cx.chatbotInsight")}
                   </div>
                 </div>
               </div>
@@ -722,7 +745,7 @@ export default function CxDashboardPage() {
 
           {/* WEEKLY CX HEALTH SCORE */}
           <div className="mt-2 flex flex-col rounded-xl border border-border bg-sidebar p-6 shadow-sm">
-            <h2 className="mb-6 text-xl font-bold text-foreground">Weekly CX Health Score</h2>
+            <h2 className="mb-6 text-xl font-bold text-foreground">{t("cx.weeklyHealth")}</h2>
 
             <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_2fr]">
               <div className="flex flex-col items-center justify-center border-r-0 border-border lg:border-r lg:pr-8">
@@ -743,16 +766,16 @@ export default function CxDashboardPage() {
                 )}>
                   <ShieldAlert className={cn("size-4", health.tone === "positive" ? "text-positive" : health.tone === "neutral" ? "text-neutral" : "text-destructive")} />
                   <span className={cn("text-sm font-bold uppercase tracking-wide", health.tone === "positive" ? "text-positive" : health.tone === "neutral" ? "text-neutral" : "text-destructive")}>
-                    CX Health is {health.label} this week
+                    {t("cx.healthIs", { label: health.label })}
                   </span>
                 </div>
               </div>
 
               <div className="flex flex-col justify-center gap-6">
                 <div>
-                  <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">Recent Trend</h3>
+                  <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">{t("cx.recentTrend")}</h3>
                   <div className="h-[60px] w-full">
-                    {health.trend.length === 0 ? <EmptyChart label="No trend data" /> : (
+                    {health.trend.length === 0 ? <EmptyChart label={t("empty.noTrendData")} /> : (
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={health.trend} margin={{ top: 5, right: 5, bottom: 5, left: 5 }}>
                         <Line type="monotone" dataKey="score" stroke="var(--positive)" strokeWidth={3} dot={{ r: 4, fill: "var(--background)" }} activeDot={{ r: 6 }} />
@@ -764,7 +787,7 @@ export default function CxDashboardPage() {
                 </div>
 
                 <div>
-                  <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">Score Composition Breakdown (Out of 100)</h3>
+                  <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">{t("cx.scoreComposition")}</h3>
                   <div className="flex h-8 w-full overflow-hidden rounded-lg">
                     {health.components.map((comp, idx) => {
                       const colors = ["bg-primary", "bg-chart-4"];
@@ -799,7 +822,7 @@ export default function CxDashboardPage() {
           )}
 
           <footer className="pb-4 pt-2 text-center text-xs text-muted-foreground">
-            Rafeeq Analytics · CX Operations Dashboard
+            {t("cx.footer")}
           </footer>
         </main>
       </div>

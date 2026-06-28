@@ -15,6 +15,7 @@ import {
 } from "recharts"
 import type { ZoneItem, TimeItem } from "@/lib/api"
 import { Panel } from "./panel"
+import { useT, useTV } from "@/lib/i18n"
 
 // Real zone names come back as "Zone 18 Muaither" — shorten to "Zone 18" for
 // axis labels while the full name remains available in the tooltip.
@@ -31,6 +32,8 @@ export function SentimentByZoneTime({
   zoneData?: ZoneItem[]
   timeData: TimeItem[]
 }) {
+  const t = useT()
+  const tv = useTV()
   const [mounted, setMounted] = useState(false)
   useEffect(() => setMounted(true), [])
 
@@ -39,7 +42,7 @@ export function SentimentByZoneTime({
   return (
     <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
       {/* Zone Chart */}
-      <Panel title="Negative Sentiment % by Zone">
+      <Panel title={t("szt.byZone")}>
         {zoneData?.length ? (
           <div style={{ height: zoneChartHeight }}>
             {mounted ? (
@@ -77,7 +80,7 @@ export function SentimentByZoneTime({
                       fontSize: 12,
                       color: "var(--popover-foreground)",
                     }}
-                    formatter={(val: any) => [`${val}%`, "Negative %"]}
+                    formatter={(val: any) => [`${val}%`, t("szt.negativePct")]}
                   />
                   <Bar
                     dataKey="negativePct"
@@ -97,22 +100,23 @@ export function SentimentByZoneTime({
           </div>
         ) : (
           <p className="text-sm text-muted-foreground">
-            No zone data yet — run sentiment classification to populate this chart.
+            {t("szt.zoneEmpty")}
           </p>
         )}
       </Panel>
 
       {/* Time of Day Chart */}
-      <Panel title="Sentiment by Time of Day">
+      <Panel title={t("szt.byTime")}>
         <div className="h-[240px]">
           {mounted ? (
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={timeData} margin={{ left: -16, right: 16, top: 8, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis 
-                  dataKey="time" 
-                  tickLine={false} 
-                  axisLine={false} 
+                <XAxis
+                  dataKey="time"
+                  tickLine={false}
+                  axisLine={false}
+                  tickFormatter={tv}
                   tick={{ fill: "var(--muted-foreground)", fontSize: 11 }}
                 />
                 <YAxis 

@@ -8,9 +8,12 @@ import { Construction } from "lucide-react"
 export function WorkInProgress({
   children,
   note,
+  label = "Work in progress",
 }: {
   children: React.ReactNode
   note?: string
+  /** Overlay label — pass a translated string for localized surfaces. */
+  label?: string
 }) {
   return (
     <div className="relative">
@@ -26,7 +29,7 @@ export function WorkInProgress({
       <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-xl bg-background/40 p-6 text-center backdrop-blur-[1px]">
         <span className="flex items-center gap-2 rounded-full border border-accent/30 bg-card px-4 py-2 text-sm font-bold text-foreground shadow-sm">
           <Construction className="size-4 text-accent" />
-          Work in progress
+          {label}
         </span>
         {note && (
           <p className="max-w-sm text-xs leading-relaxed text-muted-foreground">{note}</p>

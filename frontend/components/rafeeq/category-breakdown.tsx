@@ -3,11 +3,14 @@
 import { useEffect, useMemo, useState } from "react"
 import { Bar, BarChart, Cell, ResponsiveContainer, XAxis, YAxis } from "recharts"
 import { type CallRecord } from "@/lib/rafeeq-data"
+import { useT, useTV } from "@/lib/i18n"
 import { Panel } from "./panel"
 
 const COLORS = ["#9b4dff", "#3b82f6", "#f5a623", "#22c55e", "#06b6d4", "#ef4444", "#a78bfa"]
 
 export function CategoryBreakdown({ calls }: { calls: CallRecord[] }) {
+  const t = useT()
+  const tv = useTV()
   const [mounted, setMounted] = useState(false)
   useEffect(() => setMounted(true), [])
 
@@ -21,10 +24,10 @@ export function CategoryBreakdown({ calls }: { calls: CallRecord[] }) {
   }, [calls])
 
   return (
-    <Panel title="Call Categories">
+    <Panel title={t("chart.callCategories")}>
       {calls.length === 0 ? (
         <div className="flex h-[230px] items-center justify-center text-xs text-muted-foreground">
-          Upload transcripts to see category breakdown
+          {t("chart.uploadForCategory")}
         </div>
       ) : (
         <>
@@ -42,6 +45,7 @@ export function CategoryBreakdown({ calls }: { calls: CallRecord[] }) {
                   width={120}
                   tickLine={false}
                   axisLine={false}
+                  tickFormatter={tv}
                   tick={{ fill: "var(--muted-foreground)", fontSize: 11 }}
                 />
                 <Bar dataKey="value" radius={[0, 6, 6, 0]} barSize={16}>
@@ -62,7 +66,7 @@ export function CategoryBreakdown({ calls }: { calls: CallRecord[] }) {
                     className="size-2 rounded-full"
                     style={{ background: COLORS[i % COLORS.length] }}
                   />
-                  {c.name}
+                  {tv(c.name)}
                 </span>
                 <span className="tabular-nums font-semibold text-foreground">{c.pct}%</span>
               </li>

@@ -11,6 +11,7 @@ import {
   YAxis,
 } from "recharts"
 import { type CallRecord } from "@/lib/rafeeq-data"
+import { useT, useTV } from "@/lib/i18n"
 import { Panel } from "./panel"
 
 function getWeekLabel(dateStr: string): string {
@@ -31,22 +32,24 @@ function Legend({ color, label }: { color: string; label: string }) {
 }
 
 export function SentimentTrend({ calls }: { calls: CallRecord[] }) {
+  const t = useT()
+  const tv = useTV()
   const [mounted, setMounted] = useState(false)
   useEffect(() => setMounted(true), [])
 
   const legends = (
     <div className="flex items-center gap-3 text-[11px]">
-      <Legend color="var(--positive)" label="Positive" />
-      <Legend color="var(--neutral)" label="Neutral" />
-      <Legend color="var(--negative)" label="Negative" />
+      <Legend color="var(--positive)" label={tv("Positive")} />
+      <Legend color="var(--neutral)" label={tv("Neutral")} />
+      <Legend color="var(--negative)" label={tv("Negative")} />
     </div>
   )
 
   if (calls.length === 0) {
     return (
-      <Panel title="Sentiment Trend by Week" action={legends}>
+      <Panel title={t("chart.sentimentTrendWeek")} action={legends}>
         <div className="flex h-[240px] items-center justify-center text-xs text-muted-foreground">
-          Upload transcripts to see the sentiment trend
+          {t("chart.uploadForTrend")}
         </div>
       </Panel>
     )
@@ -79,7 +82,7 @@ export function SentimentTrend({ calls }: { calls: CallRecord[] }) {
     })
 
   return (
-    <Panel title="Sentiment Trend by Week" action={legends}>
+    <Panel title={t("chart.sentimentTrendWeek")} action={legends}>
       {mounted ? (
         <div className="overflow-hidden">
         <ResponsiveContainer width="100%" height={240}>
