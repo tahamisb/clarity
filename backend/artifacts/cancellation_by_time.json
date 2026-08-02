@@ -1,32 +1,32 @@
 [
   {
-    "time_bucket": "Dinner",
-    "total_orders": 10470616,
-    "cancelled": 0,
-    "cancel_rate_pct": 0.0
-  },
-  {
     "time_bucket": "Late Night",
-    "total_orders": 11586896,
-    "cancelled": 0,
-    "cancel_rate_pct": 0.0
+    "total_orders": 9198,
+    "cancelled": 1077,
+    "cancel_rate_pct": 11.71
   },
   {
     "time_bucket": "Morning",
-    "total_orders": 3457980,
-    "cancelled": 0,
-    "cancel_rate_pct": 0.0
+    "total_orders": 7146,
+    "cancelled": 614,
+    "cancel_rate_pct": 8.59
+  },
+  {
+    "time_bucket": "Dinner",
+    "total_orders": 21975,
+    "cancelled": 1868,
+    "cancel_rate_pct": 8.5
   },
   {
     "time_bucket": "Afternoon",
-    "total_orders": 5909342,
-    "cancelled": 0,
-    "cancel_rate_pct": 0.0
+    "total_orders": 7101,
+    "cancelled": 594,
+    "cancel_rate_pct": 8.37
   },
   {
     "time_bucket": "Lunch",
-    "total_orders": 4619957,
-    "cancelled": 0,
-    "cancel_rate_pct": 0.0
+    "total_orders": 12445,
+    "cancelled": 1035,
+    "cancel_rate_pct": 8.32
   }
 ]

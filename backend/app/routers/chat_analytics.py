@@ -1,8 +1,9 @@
 import logging
+from datetime import date
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Query
 
-from app.services import bq_chat_analytics as svc
+from app.services import db_chat_analytics as svc
 
 router = APIRouter(prefix="/api/messages", tags=["chat-analytics"])
 logger = logging.getLogger(__name__)
@@ -53,6 +54,20 @@ async def get_cross_channel():
         return await svc.get_cross_channel()
     except Exception as exc:
         logger.error(f"Error in /cross-channel: {exc}")
+        raise HTTPException(status_code=500, detail=str(exc))
+
+@router.get("/contact-rate")
+async def get_contact_rate(start: Optional[str] = Query(None), end: Optional[str] = Query(None)):
+    for label, value in (("start", start), ("end", end)):
+        if value is not None:
+            try:
+                date.fromisoformat(value)
+            except ValueError:
+                raise HTTPException(status_code=422, detail=f"{label} must be a YYYY-MM-DD date")
+    try:
+        return await svc.get_contact_rate(start, end)
+    except Exception as exc:
+        logger.error(f"Error in /contact-rate: {exc}")
         raise HTTPException(status_code=500, detail=str(exc))
 
 @router.get("/{chat_id}")

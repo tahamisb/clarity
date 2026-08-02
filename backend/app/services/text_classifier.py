@@ -6,6 +6,7 @@ import json
 import logging
 from typing import Optional
 
+from app.config import get_settings
 from app.models.enums import TextIntentEnum, TextSentimentEnum
 from app.services.gemini_service import call_with_retry
 
@@ -15,7 +16,7 @@ _VALID_SENTIMENTS = {e.value for e in TextSentimentEnum}
 _VALID_INTENTS = {e.value for e in TextIntentEnum}
 
 _PROMPT = """\
-You are a customer support message classifier for Rafeeq, a food and grocery delivery platform in Qatar.
+You are a customer support message classifier for Clarity, a food and grocery delivery platform in Qatar.
 
 Classify the following customer message. The message may be in English, Arabic, or a mix — analyse it as-is.
 Return ONLY valid JSON with exactly these fields (no markdown, no explanation):
@@ -75,11 +76,13 @@ def _normalise(raw: dict) -> dict:
 
 
 async def classify_message(text: str) -> dict:
-    raw_text = await call_with_retry(_PROMPT.format(message_text=text))
+    raw_text = await call_with_retry(
+        _PROMPT.format(message_text=text), model=get_settings().gemini_classify_model
+    )
     return _normalise(json.loads(raw_text))
 
 _CHAT_PROMPT = """\
-You are a customer support analyst for Rafeeq, a food and grocery delivery platform in Qatar.
+You are a customer support analyst for Clarity, a food and grocery delivery platform in Qatar.
 
 Analyse the following customer support messages and return ONLY a valid JSON object with no extra text, no markdown, no explanation.
 
@@ -93,12 +96,14 @@ Return exactly this JSON structure:
   "sentiment": "positive" | "neutral" | "negative",
   "confidence": <number between 0 and 1>,
   "intent": "complaint" | "refund" | "order_query" | "cancellation" | "praise" | "escalation",
-  "negative_trigger": "<short phrase describing the main issue, or null if not negative>",
-  "summary": "<one sentence summary of what the customer wanted>"
+  "negative_trigger": "<short phrase describing the main issue, or null if not negative>"
 }}
 """
 
 def _normalise_chat(raw: dict) -> dict:
+    # ~0.1% of responses arrive as a single-element array wrapping the object
+    if isinstance(raw, list):
+        raw = next((x for x in raw if isinstance(x, dict)), {})
     sentiment = str(raw.get("sentiment", "neutral")).lower()
     if sentiment not in _VALID_SENTIMENTS:
         sentiment = "neutral"
@@ -118,8 +123,6 @@ def _normalise_chat(raw: dict) -> dict:
         trigger = None
     elif trigger is not None:
         trigger = str(trigger).strip()[:200] or None
-        
-    summary = str(raw.get("summary", "")).strip()
 
     return {
         "sentiment": sentiment,
@@ -127,11 +130,13 @@ def _normalise_chat(raw: dict) -> dict:
         "intent": intent_raw,
         "intent_confidence": 1.0,  # Chat prompt doesn't ask for intent_confidence, default to 1.0
         "negative_trigger": trigger,
-        "summary": summary
     }
 
 
 async def classify_chat_messages(cleaned_text: str) -> dict:
-    raw_text = await call_with_retry(_CHAT_PROMPT.format(cleaned_customer_text=cleaned_text))
+    raw_text = await call_with_retry(
+        _CHAT_PROMPT.format(cleaned_customer_text=cleaned_text),
+        model=get_settings().gemini_classify_model,
+    )
     return _normalise_chat(json.loads(raw_text))
 

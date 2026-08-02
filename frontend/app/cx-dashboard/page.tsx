@@ -2,44 +2,35 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
-  Activity, Ban, Clock, Bot,
+  Activity, Ban, MessageCircle,
   TrendingUp, TrendingDown, AlertTriangle, ArrowRight, HeartPulse, ShieldAlert
 } from "lucide-react"
-import { Sidebar } from "@/components/rafeeq/sidebar"
-import { Topbar } from "@/components/rafeeq/topbar"
-import { StatCard } from "@/components/rafeeq/stat-card"
-import { CxDashboardLoading } from "@/components/rafeeq/loading-screen"
-import { RefreshStatus } from "@/components/rafeeq/refresh-status"
-import { WorkInProgress, WipBadge } from "@/components/rafeeq/work-in-progress"
+import { Sidebar } from "@/components/clarity/sidebar"
+import { Topbar } from "@/components/clarity/topbar"
+import { StatCard } from "@/components/clarity/stat-card"
+import { CxDashboardLoading } from "@/components/clarity/loading-screen"
+import { RefreshStatus } from "@/components/clarity/refresh-status"
 import { useAutoRefresh } from "@/lib/settings-context"
 import { useTimeFilter } from "@/lib/time-filter-context"
 import { filterByRange, type TimeRange } from "@/lib/time-range"
 import { useT, useTV } from "@/lib/i18n"
 import {
   LineChart, Line, AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, ReferenceLine
+  XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer
 } from "recharts"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 
 import {
   fetchCalls, fetchAllMessagesData, fetchCancelTrend, fetchCancelByZone,
-  fetchFeatureImportance, fetchCancelByActor, clearServerCache,
+  fetchFeatureImportance, fetchCancelByActor, fetchContactRate, clearServerCache,
   type TriggerItem, type TrendItem, type CancelTrend, type CancelByZone,
-  type FeatureImportance, type ActorRow,
+  type FeatureImportance, type ActorRow, type ContactRate,
 } from "@/lib/api"
-import type { CallRecord } from "@/lib/rafeeq-data"
+import type { CallRecord } from "@/lib/clarity-data"
 import type { SupportMessage } from "@/lib/mock-messages"
-
-// Resolution-time and chatbot telemetry have no backing data source yet, so those
-// two panels stay behind the "Work in progress" overlay using mock previews.
-import {
-  weeklyResolutionTime,
-  resolutionByIssueType,
-  chatbotStats,
-  topUnansweredQuestions,
-  chatbotResolutionSplit,
-} from "@/lib/mock-cx-dashboard"
+import { GlobalVerticalSelect } from "@/components/clarity/vertical-select"
+import { HoverBreakdown } from "@/components/clarity/hover-breakdown"
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000
 
@@ -88,52 +79,64 @@ export default function CxDashboardPage() {
   // Raw data pulled from the same endpoints that power the dedicated dashboards.
   const [calls, setCalls] = useState<CallRecord[]>([])
   const [messages, setMessages] = useState<SupportMessage[]>([])
+  // True message volume for the selected window+vertical (server aggregate).
+  // The `messages` feed is capped at 1000 for the client-side sample, so it
+  // must never be used to count total interactions.
+  const [msgTotal, setMsgTotal] = useState(0)
+  // % of support chats escalated from the bot to a human agent (server aggregate).
+  const [escalationPct, setEscalationPct] = useState<number | null>(null)
   const [triggers, setTriggers] = useState<TriggerItem[]>([])
   const [msgTrend, setMsgTrend] = useState<TrendItem[]>([])
   const [cancelTrend, setCancelTrend] = useState<CancelTrend | null>(null)
   const [cancelZones, setCancelZones] = useState<CancelByZone | null>(null)
   const [featImp, setFeatImp] = useState<FeatureImportance | null>(null)
   const [cancelActors, setCancelActors] = useState<ActorRow[] | null>(null)
+  const [contactRate, setContactRate] = useState<ContactRate | null>(null)
 
-  // App-wide time-range filter. Calls/messages carry per-record dates (filtered
-  // client-side); the cancellation aggregates are re-queried server-side.
-  const { range, queryKey } = useTimeFilter()
+  // App-wide time-range + vertical filters. Calls/messages carry per-record
+  // dates/verticals (filtered client-side); the cancellation aggregates are
+  // re-queried server-side.
+  const { range, vertical, setVertical, queryKey } = useTimeFilter()
 
-  // Secondary scope selectors (visual placeholders, unchanged).
+  // Secondary zone selector remains a visual placeholder.
   const [zoneFilter, setZoneFilter] = useState("All Zones")
-  const [categoryFilter, setCategoryFilter] = useState("All Categories")
 
   const resetFilters = () => {
     setZoneFilter("All Zones")
-    setCategoryFilter("All Categories")
+    setVertical("all")
   }
 
-  const loadData = useCallback((r: TimeRange, background = false) => {
+  const loadData = useCallback((r: TimeRange, background = false, bust = false) => {
     if (background) setRefreshing(true)
     else setLoading(true)
-    // A refresh re-reads from BigQuery; bust the server cache first so it does.
-    const ready = background ? clearServerCache() : Promise.resolve()
+    // Only the manual Refresh button busts the server cache — auto-refresh and
+    // window toggles ride the backend's TTL cache so they stay fast.
+    const ready = bust ? clearServerCache() : Promise.resolve()
     ready.then(() => Promise.all([
       fetchCalls(),
-      fetchAllMessagesData(r),
-      fetchCancelTrend(r),
-      fetchCancelByZone(r),
+      fetchAllMessagesData(r, 4, 24, vertical),
+      fetchCancelTrend(r, vertical),
+      fetchCancelByZone(r, vertical),
       fetchFeatureImportance(),
-      fetchCancelByActor(r),
-    ])).then(([callsData, msgs, cTrend, cZones, fImp, actors]) => {
+      fetchCancelByActor(r, vertical),
+      fetchContactRate(r),
+    ])).then(([callsData, msgs, cTrend, cZones, fImp, actors, cRate]) => {
       setCalls(callsData ?? [])
       setMessages(msgs.messages ?? [])
+      setMsgTotal(msgs.overview?.total ?? 0)
+      setEscalationPct(msgs.overview?.escalationPct ?? null)
       setTriggers(msgs.triggers ?? [])
       setMsgTrend(msgs.trend ?? [])
       setCancelTrend(cTrend)
       setCancelZones(cZones)
       setFeatImp(fImp)
       setCancelActors(actors)
+      setContactRate(cRate)
       setLastUpdated(new Date())
       if (background) setRefreshing(false)
       else setLoading(false)
     })
-  }, [])
+  }, [vertical])
 
   // Initial load (full skeleton) once.
   useEffect(() => {
@@ -151,14 +154,19 @@ export default function CxDashboardPage() {
 
   useAutoRefresh(() => loadData(range, true))
 
-  // Client-side date scoping for the record-level sources.
+  // Client-side date + vertical scoping for the record-level sources.
+  const byVertical = useCallback(
+    <T extends { vertical?: string }>(rows: T[]) =>
+      vertical === "all" ? rows : rows.filter((r) => r.vertical === vertical),
+    [vertical],
+  )
   const scopedCalls = useMemo(
-    () => filterByRange(calls, range, (c) => c.datetime),
-    [calls, range],
+    () => byVertical(filterByRange(calls, range, (c) => c.datetime)),
+    [calls, range, byVertical],
   )
   const scopedMessages = useMemo(
-    () => filterByRange(messages, range, (m) => m.date),
-    [messages, range],
+    () => byVertical(filterByRange(messages, range, (m) => m.date)),
+    [messages, range, byVertical],
   )
 
   // -------------------------------------------------------------------------
@@ -203,13 +211,6 @@ export default function CxDashboardPage() {
     const orders = months.reduce((s, m) => s + (m.total_orders ?? 0), 0)
     return orders ? (cancelled / orders) * 100 : 0
   }, [cancelTrend])
-
-  // Escalation proxy: share of calls categorised as Complaints
-  const escalationRate = useMemo(() => {
-    if (!scopedCalls.length) return null
-    const complaints = scopedCalls.filter((c) => c.category === "Complaints").length
-    return (complaints / scopedCalls.length) * 100
-  }, [scopedCalls])
 
   // -------------------------------------------------------------------------
   // Calls panel
@@ -276,19 +277,24 @@ export default function CxDashboardPage() {
   // -------------------------------------------------------------------------
   // Cancellations panel
   // -------------------------------------------------------------------------
+  // Every ISO week in the selected window (period is "YYYY-Www"; drop the year
+  // for the compact axis). No slice — YTD has 27 weeks, not 12.
   const weeklyCancellations = useMemo(
-    () => (cancelTrend?.weekly ?? []).slice(-12).map((w, i) => ({ week: `W${i + 1}`, rate: w.cancel_rate_pct })),
+    () => (cancelTrend?.weekly ?? []).map((w) => ({ week: w.period.split("-").pop() ?? w.period, rate: w.cancel_rate_pct })),
     [cancelTrend],
   )
-  const topCancellationDrivers = useMemo(() => {
+  // Who initiated the cancellation (customer via support, Clarity's driver, or the
+  // vendor). Percentages are a true share of ALL cancellations. Falls back to the
+  // model's feature-importance only when the model is trained (top_features present).
+  const cancelDrivers = useMemo(() => {
     if (featImp?.top_features?.length) {
       const top = featImp.top_features.slice(0, 3)
       const sum = top.reduce((s, f) => s + f.importance, 0) || 1
-      return top.map((f) => ({ name: cleanFeature(f.feature), percentage: Math.round((f.importance / sum) * 100) }))
+      return { byActor: false, rows: top.map((f) => ({ name: cleanFeature(f.feature), percentage: Math.round((f.importance / sum) * 100) })) }
     }
     const actors = cancelActors ?? []
-    const sum = actors.slice(0, 3).reduce((s, a) => s + a.cancellations, 0) || 1
-    return actors.slice(0, 3).map((a) => ({ name: a.cancelled_by, percentage: Math.round((a.cancellations / sum) * 100) }))
+    const total = actors.reduce((s, a) => s + a.cancellations, 0) || 1
+    return { byActor: true, rows: actors.slice(0, 3).map((a) => ({ name: a.cancelled_by, percentage: Math.round((a.cancellations / total) * 100) })) }
   }, [featImp, cancelActors])
   const cancellationZones = useMemo(() => {
     const zones = cancelZones?.by_zone_name ?? []
@@ -318,15 +324,48 @@ export default function CxDashboardPage() {
     const score = sentimentPts + cancelPts
     const label = score >= 75 ? t("cx.healthGood") : score >= 50 ? t("cx.healthFair") : t("cx.healthPoor")
     const tone = score >= 75 ? "positive" : score >= 50 ? "neutral" : "destructive"
+    // Raw inputs, not derived points — sentiment fills toward 10/10 (more = good),
+    // cancellations fill toward the 20% penalty cap (more = bad).
     const components = [
-      { name: t("cx.compSentiment"), score: sentimentPts },
-      { name: t("cx.compCancellations"), score: cancelPts },
+      { name: t("cx.compSentiment"), value: t("cx.compSentimentDetail", { score: sentimentScore.toFixed(1) }), pct: (sentimentScore / 10) * 100 },
+      { name: t("cx.compCancellations"), value: t("cx.compCancelDetail", { rate: cancellationRate.toFixed(1) }), pct: Math.min(cancellationRate / 20, 1) * 100 },
     ]
-    const trend = weeklySentimentScore.slice(-8).map((w) => ({ week: w.week, score: Math.round(w.score * 10) }))
+    // Weekly health = that week's sentiment points + that week's cancellation
+    // points, same formula as the headline. Sentiment blends both channels like
+    // the headline does: message percentages back to counts (the trend carries
+    // each week's total) plus call sentiment counts.
+    // ponytail: series are index-aligned from the most recent week, not
+    // calendar-joined — fine while all are contiguous weekly buckets.
+    const msgs = msgTrend.slice(-8)
+    const calls = callWeeks.slice(-msgs.length)
+    const cWeeks = weeklyCancellations.slice(-msgs.length)
+    const trend = msgs.map((m, i) => {
+      const c = calls[i - (msgs.length - calls.length)]
+      const pos = (m.positive / 100) * m.total + (c?.pos ?? 0)
+      const neu = (m.neutral / 100) * m.total + (c?.neu ?? 0)
+      const total = m.total + (c ? c.pos + c.neu + c.neg : 0)
+      const sPts = total ? ((pos * 10 + neu * 5) / total / 10) * 50 : 0
+      const cw = cWeeks[i - (msgs.length - cWeeks.length)]
+      const cPts = cw ? (1 - Math.min(cw.rate / 20, 1)) * 50 : cancelPts
+      // Keep the source week label (e.g. W21–W28) so it matches the sentiment
+      // chart's numbering instead of restarting at W1.
+      return { week: m.week, score: Math.round(sPts + cPts) }
+    })
     return { score, label, tone, components, trend }
-  }, [sentimentScore, cancellationRate, weeklySentimentScore, t])
+  }, [sentimentScore, cancellationRate, msgTrend, callWeeks, weeklyCancellations, t])
 
-  const totalInteractions = scopedCalls.length + scopedMessages.length
+  const totalInteractions = scopedCalls.length + msgTotal
+
+  // Hover breakdown behind the cancellation-rate stat: top zones by cancelled
+  // volume (falls back to cancelling actors if zone data is empty).
+  const cancelContributors = useMemo(() => {
+    const zones = [...(cancelZones?.by_zone_name ?? [])]
+      .sort((a, b) => b.cancelled - a.cancelled)
+      .slice(0, 5)
+      .map((z) => ({ label: z.zone, value: z.cancelled, pct: z.cancel_rate_pct }))
+    if (zones.length) return zones
+    return (cancelActors ?? []).slice(0, 5).map((a) => ({ label: a.cancelled_by, value: a.cancellations }))
+  }, [cancelZones, cancelActors])
 
   // Custom tooltip
   const CustomTooltip = ({ active, payload, label }: any) => {
@@ -365,7 +404,7 @@ export default function CxDashboardPage() {
                 {t("cx.subtitle")}
               </p>
             </div>
-            <RefreshStatus lastUpdated={lastUpdated} refreshing={refreshing} onRefresh={() => loadData(range, true)} />
+            <RefreshStatus lastUpdated={lastUpdated} refreshing={refreshing} onRefresh={() => loadData(range, true, true)} />
           </div>
 
           {loading ? (
@@ -383,14 +422,8 @@ export default function CxDashboardPage() {
                   <option key={z} value={z}>{tv(z)}</option>
                 ))}
               </select>
-              <select
-                className="rounded-lg border border-border bg-background px-3 py-1.5 text-sm font-medium text-foreground outline-none focus:ring-2 focus:ring-primary/50"
-                value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}
-              >
-                {["All Categories", "Restaurant", "Grocery", "Pharmacy", "Dark Kitchen"].map((c) => (
-                  <option key={c} value={c}>{tv(c)}</option>
-                ))}
-              </select>
+              {/* Mobile-only: topbar shows the vertical filter on lg+ (avoids a duplicate). */}
+              <GlobalVerticalSelect className="lg:hidden" />
             </div>
             <button
               onClick={resetFilters}
@@ -401,13 +434,14 @@ export default function CxDashboardPage() {
           </div>
 
           {/* Summary KPI Strip */}
-          <div className="grid grid-cols-2 gap-4 xl:grid-cols-6">
+          <div className="grid grid-cols-2 gap-4 xl:grid-cols-5">
             <StatCard label={t("cx.totalInteractions")} value={totalInteractions.toLocaleString()} trend="neutral" icon={Activity} />
+            <StatCard label={t("cx.contactRate")} value={contactRate ? `${contactRate.contact_rate_pct.toFixed(1)}%` : "—"} trend="neutral" icon={MessageCircle} />
             <StatCard label={t("cx.overallSentiment")} value={`${sentimentScore.toFixed(1)}/10`} trend="neutral" icon={HeartPulse} />
-            <StatCard label={t("cx.cancellationRate")} value={`${cancellationRate.toFixed(1)}%`} trend="neutral" icon={Ban} />
-            <StatCard label={t("cx.avgResolution")} value="—" trend="neutral" icon={Clock} />
-            <StatCard label={t("cx.botContainment")} value="—" trend="neutral" icon={Bot} />
-            <StatCard label={t("cx.escalationRate")} value={escalationRate === null ? "—" : `${escalationRate.toFixed(1)}%`} trend="neutral" icon={AlertTriangle} />
+            <HoverBreakdown title={t("hover.topZones")} rows={cancelContributors}>
+              <StatCard label={t("cx.cancellationRate")} value={`${cancellationRate.toFixed(1)}%`} trend="neutral" icon={Ban} />
+            </HoverBreakdown>
+            <StatCard label={t("cx.escalationRate")} value={escalationPct === null ? "—" : `${escalationPct.toFixed(1)}%`} trend="neutral" icon={AlertTriangle} />
           </div>
 
           {/* Grid Layout for Panels */}
@@ -555,7 +589,7 @@ export default function CxDashboardPage() {
             </div>
 
             {/* CANCELLATIONS PANEL */}
-            <div className="flex flex-col rounded-xl border border-border bg-card p-5 shadow-sm">
+            <div className="flex flex-col rounded-xl border border-border bg-card p-5 shadow-sm xl:col-span-2">
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="text-lg font-bold text-foreground">{t("cancel.title")}</h2>
                 <Link href="/cancellations" className="group flex items-center gap-1 text-xs font-semibold text-primary transition-colors hover:text-primary/80">
@@ -579,9 +613,12 @@ export default function CxDashboardPage() {
                     )}
                   </div>
                   <div className="flex flex-col gap-2">
-                    {topCancellationDrivers.length === 0 ? (
+                    <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                      {cancelDrivers.byActor ? t("cx.cancelledBy") : t("cx.topDrivers")}
+                    </h3>
+                    {cancelDrivers.rows.length === 0 ? (
                       <p className="text-xs text-muted-foreground">{t("cx.trainModelDrivers")}</p>
-                    ) : topCancellationDrivers.map((driver, i) => (
+                    ) : cancelDrivers.rows.map((driver, i) => (
                       <div key={i} className="flex items-center justify-between rounded bg-muted/30 px-3 py-2 text-sm">
                         <span className="font-medium text-foreground">{tv(driver.name)}</span>
                         <span className="text-xs font-semibold text-muted-foreground">{driver.percentage}%</span>
@@ -614,131 +651,6 @@ export default function CxDashboardPage() {
                   </div>
                 </div>
               </div>
-            </div>
-
-            {/* RESOLUTION TIME PANEL — no resolution-time data source yet */}
-            <div className="flex flex-col rounded-xl border border-border bg-card p-5 shadow-sm">
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-lg font-bold text-foreground">{t("cx.resolutionTime")}</h2>
-                <WipBadge />
-              </div>
-
-              <WorkInProgress note={t("cx.resolutionWip")} label={t("common.workInProgress")}>
-              <div className="grid flex-1 grid-cols-1 gap-6 lg:grid-cols-[1fr_1.5fr]">
-                <div className="flex flex-col gap-4">
-                  <div className="h-[180px] w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={weeklyResolutionTime} margin={{ top: 10, right: 0, bottom: 0, left: -20 }}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
-                        <XAxis dataKey="week" stroke="var(--muted-foreground)" fontSize={11} tickLine={false} axisLine={false} />
-                        <YAxis stroke="var(--muted-foreground)" fontSize={11} tickLine={false} axisLine={false} />
-                        <RechartsTooltip cursor={{ fill: 'var(--muted)', opacity: 0.5 }} content={<CustomTooltip />} />
-                        <ReferenceLine y={4} stroke="var(--chart-4)" strokeDasharray="3 3" label={{ position: 'top', value: t("cx.slaRef", { n: 4 }), fill: 'var(--chart-4)', fontSize: 10 }} />
-                        <Bar dataKey="hours" radius={[4, 4, 0, 0]} barSize={16}>
-                          {weeklyResolutionTime.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.hours > 4 ? "var(--destructive)" : "var(--positive)"} />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-
-                <div className="flex flex-col overflow-hidden rounded-lg border border-border">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-muted/50 text-muted-foreground">
-                      <tr>
-                        <th className="px-3 py-2 font-semibold">{t("col.issueType")}</th>
-                        <th className="px-3 py-2 font-semibold">{t("col.avgTime")}</th>
-                        <th className="px-3 py-2 font-semibold text-center">{t("col.slaStatus")}</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border">
-                      {resolutionByIssueType.map((issue, idx) => (
-                        <tr key={idx} className="bg-card">
-                          <td className="px-3 py-2 font-medium text-foreground">{issue.type}</td>
-                          <td className="px-3 py-2 flex items-center gap-1">
-                            {issue.avgTime}h
-                            {issue.trend === "up" ? <TrendingUp className="size-3 text-destructive" /> : issue.trend === "down" ? <TrendingDown className="size-3 text-positive" /> : null}
-                          </td>
-                          <td className="px-3 py-2 text-center">
-                            <span className={cn(
-                              "inline-flex items-center justify-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider",
-                              issue.status === 'met' ? "border-positive/20 bg-positive/10 text-positive" : "border-destructive/20 bg-destructive/10 text-destructive"
-                            )}>
-                              {issue.sla}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-              </WorkInProgress>
-            </div>
-
-            {/* CHATBOT PERFORMANCE PANEL (Spans full width) — no bot telemetry yet */}
-            <div className="flex flex-col rounded-xl border border-border bg-card p-5 shadow-sm xl:col-span-2">
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-lg font-bold text-foreground">{t("cx.chatbotSummary")}</h2>
-                <WipBadge />
-              </div>
-
-              <WorkInProgress note={t("cx.chatbotWip")} label={t("common.workInProgress")}>
-              <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_1.5fr_1fr]">
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="flex flex-col justify-center rounded-lg border border-border bg-sidebar p-3 text-center">
-                    <span className="text-xs text-muted-foreground mb-1">{t("cx.containmentRate")}</span>
-                    <span className="text-xl font-bold text-foreground">{chatbotStats.containmentRate}%</span>
-                  </div>
-                  <div className="flex flex-col justify-center rounded-lg border border-border bg-sidebar p-3 text-center">
-                    <span className="text-xs text-muted-foreground mb-1">{t("cx.fallbackRate")}</span>
-                    <span className="text-xl font-bold text-destructive">{chatbotStats.fallbackRate}%</span>
-                  </div>
-                  <div className="flex flex-col justify-center rounded-lg border border-border bg-sidebar p-3 text-center">
-                    <span className="text-xs text-muted-foreground mb-1">{t("cx.avgBotTurns")}</span>
-                    <span className="text-xl font-bold text-foreground">{chatbotStats.avgBotTurns}</span>
-                  </div>
-                  <div className="flex flex-col justify-center rounded-lg border border-border bg-sidebar p-3 text-center">
-                    <span className="text-xs text-muted-foreground mb-1">{t("cx.topUnanswered")}</span>
-                    <span className="text-sm font-bold text-foreground truncate px-1" title={chatbotStats.topUnanswered}>{chatbotStats.topUnanswered}</span>
-                  </div>
-                </div>
-
-                <div className="flex flex-col">
-                  <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">{t("cx.topUnansweredQuestions")}</h3>
-                  <div className="flex flex-col gap-2">
-                    {topUnansweredQuestions.map(q => (
-                      <div key={q.rank} className="flex items-center gap-3 rounded bg-muted/30 px-3 py-2 text-sm">
-                        <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/20 text-[10px] font-bold text-primary">{q.rank}</span>
-                        <span className="flex-1 truncate text-foreground" dir="auto">{q.question}</span>
-                        <span className="text-xs font-semibold text-muted-foreground">{q.count}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-4">
-                  <div className="flex h-[130px] w-full items-center justify-center">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie data={chatbotResolutionSplit} innerRadius={35} outerRadius={55} paddingAngle={2} dataKey="value">
-                          {chatbotResolutionSplit.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.fill} />
-                          ))}
-                        </Pie>
-                        <RechartsTooltip content={<CustomTooltip />} />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-                  <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-xs leading-relaxed text-foreground">
-                    <span className="font-semibold text-primary block mb-1">{t("common.aiInsight")}</span>
-                    {t("cx.chatbotInsight")}
-                  </div>
-                </div>
-              </div>
-              </WorkInProgress>
             </div>
 
           </div>
@@ -774,11 +686,19 @@ export default function CxDashboardPage() {
               <div className="flex flex-col justify-center gap-6">
                 <div>
                   <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">{t("cx.recentTrend")}</h3>
-                  <div className="h-[60px] w-full">
-                    {health.trend.length === 0 ? <EmptyChart label={t("empty.noTrendData")} /> : (
+                  <div className="h-[60px] w-full [&_.recharts-wrapper]:outline-none [&_svg]:outline-none">
+                    {/* A single week renders as one floating dot — show the empty state instead. */}
+                    {health.trend.length < 2 ? <EmptyChart label={t("empty.noTrendData")} /> : (
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={health.trend} margin={{ top: 5, right: 5, bottom: 5, left: 5 }}>
-                        <Line type="monotone" dataKey="score" stroke="var(--positive)" strokeWidth={3} dot={{ r: 4, fill: "var(--background)" }} activeDot={{ r: 6 }} />
+                        <XAxis dataKey="week" hide />
+                        {/* Fixed 0–100 scale so 60 sits at 60% height instead of auto-zooming flat. */}
+                        <YAxis domain={[0, 100]} hide />
+                        <Line
+                          type="monotone" dataKey="score"
+                          stroke={health.tone === "positive" ? "var(--positive)" : health.tone === "neutral" ? "var(--neutral)" : "var(--destructive)"}
+                          strokeWidth={3} dot={{ r: 4, fill: "var(--background)" }} activeDot={{ r: 6 }}
+                        />
                         <RechartsTooltip content={<CustomTooltip />} cursor={{ stroke: 'var(--muted)' }} />
                       </LineChart>
                     </ResponsiveContainer>
@@ -787,29 +707,29 @@ export default function CxDashboardPage() {
                 </div>
 
                 <div>
-                  <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">{t("cx.scoreComposition")}</h3>
-                  <div className="flex h-8 w-full overflow-hidden rounded-lg">
+                  <div className="mb-3 flex items-center justify-between">
+                    <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">{t("cx.scoreComposition")}</h3>
+                    <span className="text-sm font-bold text-foreground">{health.score} / 100</span>
+                  </div>
+                  {/* The two raw metrics behind the score — no derived points. */}
+                  <div className="flex flex-col gap-3">
                     {health.components.map((comp, idx) => {
                       const colors = ["bg-primary", "bg-chart-4"];
                       return (
-                        <div
-                          key={comp.name}
-                          className={cn("flex items-center justify-center text-[10px] font-bold text-white transition-all hover:opacity-80", colors[idx % colors.length])}
-                          style={{ width: `${comp.score}%` }}
-                          title={`${comp.name}: ${comp.score} points`}
-                        >
-                          {comp.score}
-                        </div>
-                      )
-                    })}
-                  </div>
-                  <div className="mt-2 flex flex-wrap justify-between gap-2 text-xs text-muted-foreground">
-                    {health.components.map((comp, idx) => {
-                      const dot = ["bg-primary", "bg-chart-4"];
-                      return (
-                        <div key={comp.name} className="flex items-center gap-1">
-                          <div className={cn("size-2 rounded-full", dot[idx % dot.length])} />
-                          {comp.name}
+                        <div key={comp.name}>
+                          <div className="mb-1 flex items-center justify-between text-xs">
+                            <span className="flex items-center gap-1.5 text-muted-foreground">
+                              <span className={cn("size-2 rounded-full", colors[idx % colors.length])} />
+                              <span className="font-medium text-foreground">{comp.name}</span>
+                            </span>
+                            <span className="font-semibold text-foreground">{comp.value}</span>
+                          </div>
+                          <div className="h-2.5 w-full overflow-hidden rounded-full bg-muted/40">
+                            <div
+                              className={cn("h-full rounded-full transition-all", colors[idx % colors.length])}
+                              style={{ width: `${comp.pct}%` }}
+                            />
+                          </div>
                         </div>
                       )
                     })}

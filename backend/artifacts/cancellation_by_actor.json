@@ -1,1 +1,22 @@
-[]
+[
+  {
+    "cancelled_by": "Customer",
+    "cancellations": 1974,
+    "avg_order_value": 64.03
+  },
+  {
+    "cancelled_by": "Vendor",
+    "cancellations": 1866,
+    "avg_order_value": 63.8
+  },
+  {
+    "cancelled_by": "Clarity Ops",
+    "cancellations": 1151,
+    "avg_order_value": 63.25
+  },
+  {
+    "cancelled_by": "Driver",
+    "cancellations": 197,
+    "avg_order_value": 65.68
+  }
+]

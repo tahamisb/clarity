@@ -5,10 +5,10 @@ import {
   BookOpen, Calculator, ShieldAlert, Compass, HelpCircle, Bug,
   Send, ChevronDown, PhoneCall, MessageSquare, Ban, Check, PlayCircle,
 } from "lucide-react"
-import { Sidebar } from "@/components/rafeeq/sidebar"
-import { Topbar } from "@/components/rafeeq/topbar"
-import { Panel } from "@/components/rafeeq/panel"
-import { WorkInProgress, WipBadge } from "@/components/rafeeq/work-in-progress"
+import { Sidebar } from "@/components/clarity/sidebar"
+import { Topbar } from "@/components/clarity/topbar"
+import { Panel } from "@/components/clarity/panel"
+import { WorkInProgress, WipBadge } from "@/components/clarity/work-in-progress"
 import { useT } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 

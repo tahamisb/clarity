@@ -1,6 +1,5 @@
 """
-Pillar 01 analytics — all call_analysis query functions.
-Mirrors the old analytics.py, now importing from bq_client.
+Pillar 01 analytics — all call_analysis query functions, over the local warehouse.
 """
 
 import asyncio
@@ -9,16 +8,23 @@ import logging
 import re
 import time
 
-from app.config import get_settings
-from app.services.bq_client import get_client
+from app.services import local_db as db
+from app.services.local_db import countif, safe_divide
+from app.services.verticals import merchant_cte, vertical_case
 
 logger = logging.getLogger(__name__)
+
+# A call's vertical = vertical of the first merchant named in it (resolved
+# through the mv merchant→platform map; no merchant → 'Other').
+_VERTICAL = vertical_case("mv.platform")
+_CALL_MV_JOIN = "LEFT JOIN mv ON json_extract(ca.restaurant_names, '$[0]') = mv.merchant_name"
+_MV_WITH = f"WITH {merchant_cte('vendor_kpi')}\n"
 
 
 # ---------------------------------------------------------------------------
 # TTL cache — these aggregates scan the full call_analysis table and the
 # dashboard refetches them on every mount + auto-refresh tick. 5-min cache
-# collapses repeat loads to one BQ query.
+# collapses repeat loads to one query.
 # ponytail: copy of the cancellation_service cache; extract to a shared util
 # if a third service needs it.
 # ---------------------------------------------------------------------------
@@ -57,7 +63,7 @@ def _extract_agent_name(transcript: str) -> str:
     m = re.search(r'الموظف\s*\(([^)]+)\)', transcript)
     if m:
         return m.group(1).strip()
-    # Arabic intro line:  خدمة عملاء رفيق، معك Fatima.
+    # Arabic intro line:  خدمة عملاء Clarity، معك Fatima.
     m = re.search(r'معك\s+([^\.\n،،]+)', transcript)
     if m:
         return m.group(1).strip()
@@ -161,60 +167,49 @@ def _analyze_customer_behavior(transcript: str) -> str:
         return "Neutral"
 
 
-def _table_refs() -> tuple[str, str]:
-    s = get_settings()
-    p, d = s.gcp_project_id, s.bq_calls_dataset
-    return f"`{p}.{d}.call_analysis`", f"`{p}.{d}.vendor_kpi`"
-
-
-def _run(sql: str) -> list[dict]:
-    return [dict(row) for row in get_client().query(sql).result()]
+def _topics_sql(order_by: str) -> str:
+    return f"""
+        {_MV_WITH}
+        SELECT ca.primary_intent AS topic, COUNT(*) AS volume,
+          {countif("ca.sentiment = 'negative'")} AS negative_count,
+          ROUND({safe_divide(countif("ca.sentiment = 'negative'"), "COUNT(*)")} * 100, 1) AS negative_pct,
+          ROUND(AVG(ca.sentiment_confidence), 3) AS avg_confidence,
+          mode_value({_VERTICAL}) AS top_vertical
+        FROM call_analysis ca {_CALL_MV_JOIN}
+        GROUP BY ca.primary_intent ORDER BY {order_by} LIMIT 10
+    """
 
 
 def _summary_sync() -> dict:
-    T, _ = _table_refs()
-    overview = _run(f"""
+    overview = db.query_one(f"""
         SELECT COUNT(*) AS total_calls,
-          COUNTIF(sentiment = 'positive') AS positive_calls,
-          COUNTIF(sentiment = 'neutral')  AS neutral_calls,
-          COUNTIF(sentiment = 'negative') AS negative_calls,
-          ROUND(SAFE_DIVIDE(COUNTIF(sentiment = 'negative'), COUNT(*)) * 100, 1) AS negative_pct
-        FROM {T}
-    """)[0]
+          {countif("sentiment = 'positive'")} AS positive_calls,
+          {countif("sentiment = 'neutral'")}  AS neutral_calls,
+          {countif("sentiment = 'negative'")} AS negative_calls,
+          ROUND({safe_divide(countif("sentiment = 'negative'"), "COUNT(*)")} * 100, 1) AS negative_pct
+        FROM call_analysis
+    """)
 
-    intent_dist = _run(f"""
+    intent_dist = db.query(f"""
         SELECT primary_intent, COUNT(*) AS total,
-          COUNTIF(sentiment = 'positive') AS positive_count,
-          COUNTIF(sentiment = 'neutral')  AS neutral_count,
-          COUNTIF(sentiment = 'negative') AS negative_count,
+          {countif("sentiment = 'positive'")} AS positive_count,
+          {countif("sentiment = 'neutral'")}  AS neutral_count,
+          {countif("sentiment = 'negative'")} AS negative_count,
           ROUND(AVG(sentiment_confidence), 3) AS avg_confidence
-        FROM {T} GROUP BY primary_intent ORDER BY total DESC
+        FROM call_analysis GROUP BY primary_intent ORDER BY total DESC
     """)
 
-    trend = _run(f"""
-        SELECT FORMAT_TIMESTAMP('%G-W%V', analysed_at) AS week,
-          COUNTIF(sentiment = 'positive') AS positive,
-          COUNTIF(sentiment = 'neutral')  AS neutral,
-          COUNTIF(sentiment = 'negative') AS negative,
+    trend = db.query(f"""
+        SELECT iso_week(analysed_at) AS week,
+          {countif("sentiment = 'positive'")} AS positive,
+          {countif("sentiment = 'neutral'")}  AS neutral,
+          {countif("sentiment = 'negative'")} AS negative,
           COUNT(*) AS total
-        FROM {T} WHERE analysed_at IS NOT NULL GROUP BY week ORDER BY week
+        FROM call_analysis WHERE analysed_at IS NOT NULL GROUP BY week ORDER BY week
     """)
 
-    top_by_freq = _run(f"""
-        SELECT primary_intent AS topic, COUNT(*) AS volume,
-          COUNTIF(sentiment = 'negative') AS negative_count,
-          ROUND(SAFE_DIVIDE(COUNTIF(sentiment='negative'), COUNT(*)) * 100, 1) AS negative_pct,
-          ROUND(AVG(sentiment_confidence), 3) AS avg_confidence
-        FROM {T} GROUP BY primary_intent ORDER BY volume DESC LIMIT 10
-    """)
-
-    top_by_neg = _run(f"""
-        SELECT primary_intent AS topic, COUNT(*) AS volume,
-          COUNTIF(sentiment = 'negative') AS negative_count,
-          ROUND(SAFE_DIVIDE(COUNTIF(sentiment='negative'), COUNT(*)) * 100, 1) AS negative_pct,
-          ROUND(AVG(sentiment_confidence), 3) AS avg_confidence
-        FROM {T} GROUP BY primary_intent ORDER BY negative_pct DESC, volume DESC LIMIT 10
-    """)
+    top_by_freq = db.query(_topics_sql("volume DESC"))
+    top_by_neg = db.query(_topics_sql("negative_pct DESC, volume DESC"))
 
     return {
         "overview": overview,
@@ -233,33 +228,31 @@ async def get_analytics_summary() -> dict:
 
 
 def _area_insights_sync() -> dict:
-    T, VK = _table_refs()
-
-    from_entities = _run(f"""
-        SELECT area, COUNT(*) AS total_calls,
-          COUNTIF(ca.sentiment = 'negative') AS negative_calls,
-          ROUND(SAFE_DIVIDE(COUNTIF(ca.sentiment='negative'), COUNT(*)) * 100, 1) AS negative_pct,
-          COUNTIF(ca.primary_intent = 'complaint')       AS complaints,
-          COUNTIF(ca.primary_intent = 'delivery_issue')  AS delivery_issues,
-          COUNTIF(ca.primary_intent = 'refund_request')  AS refund_requests
-        FROM {T} ca, UNNEST(JSON_VALUE_ARRAY(ca.areas)) AS area
-        WHERE area IS NOT NULL AND TRIM(area) != ''
+    from_entities = db.query(f"""
+        SELECT a.value AS area, COUNT(*) AS total_calls,
+          {countif("ca.sentiment = 'negative'")} AS negative_calls,
+          ROUND({safe_divide(countif("ca.sentiment = 'negative'"), "COUNT(*)")} * 100, 1) AS negative_pct,
+          {countif("ca.primary_intent = 'complaint'")}       AS complaints,
+          {countif("ca.primary_intent = 'delivery_issue'")}  AS delivery_issues,
+          {countif("ca.primary_intent = 'refund_request'")}  AS refund_requests
+        FROM call_analysis ca, json_each(ca.areas) AS a
+        WHERE a.value IS NOT NULL AND TRIM(a.value) != ''
         GROUP BY area ORDER BY total_calls DESC LIMIT 20
     """)
 
     from_orders = []
     try:
-        from_orders = _run(f"""
+        from_orders = db.query(f"""
             SELECT vk.customer_zone,
               COUNT(DISTINCT ca.call_id) AS support_calls,
-              COUNTIF(ca.sentiment = 'negative') AS negative_calls,
-              ROUND(SAFE_DIVIDE(COUNTIF(ca.sentiment='negative'), COUNT(*)) * 100, 1) AS negative_pct,
-              COUNTIF(ca.primary_intent = 'delivery_issue') AS delivery_issues,
-              COUNTIF(ca.primary_intent = 'complaint')      AS complaints,
+              {countif("ca.sentiment = 'negative'")} AS negative_calls,
+              ROUND({safe_divide(countif("ca.sentiment = 'negative'"), "COUNT(*)")} * 100, 1) AS negative_pct,
+              {countif("ca.primary_intent = 'delivery_issue'")} AS delivery_issues,
+              {countif("ca.primary_intent = 'complaint'")}      AS complaints,
               ROUND(AVG(vk.since_create_til_delivred_min), 1) AS avg_delivery_min,
               ROUND(AVG(vk.total_order_value), 2) AS avg_order_value
-            FROM {T} ca, UNNEST(JSON_VALUE_ARRAY(ca.order_ids)) AS order_id
-            JOIN {VK} vk ON CAST(vk.id AS STRING) = order_id
+            FROM call_analysis ca, json_each(ca.order_ids) AS o
+            JOIN vendor_kpi vk ON CAST(vk.id AS TEXT) = o.value
             WHERE vk.customer_zone IS NOT NULL AND TRIM(vk.customer_zone) != ''
             GROUP BY vk.customer_zone ORDER BY support_calls DESC LIMIT 20
         """)
@@ -277,34 +270,32 @@ async def get_area_insights() -> dict:
 
 
 def _restaurant_insights_sync() -> dict:
-    T, VK = _table_refs()
-
-    from_entities = _run(f"""
-        SELECT restaurant, COUNT(*) AS total_calls,
-          COUNTIF(ca.sentiment = 'negative') AS negative_calls,
-          ROUND(SAFE_DIVIDE(COUNTIF(ca.sentiment='negative'), COUNT(*)) * 100, 1) AS negative_pct,
-          COUNTIF(ca.primary_intent = 'complaint')      AS complaints,
-          COUNTIF(ca.primary_intent = 'wrong_item')     AS wrong_items,
-          COUNTIF(ca.primary_intent = 'delivery_issue') AS delivery_issues
-        FROM {T} ca, UNNEST(JSON_VALUE_ARRAY(ca.restaurant_names)) AS restaurant
-        WHERE restaurant IS NOT NULL AND TRIM(restaurant) != ''
+    from_entities = db.query(f"""
+        SELECT r.value AS restaurant, COUNT(*) AS total_calls,
+          {countif("ca.sentiment = 'negative'")} AS negative_calls,
+          ROUND({safe_divide(countif("ca.sentiment = 'negative'"), "COUNT(*)")} * 100, 1) AS negative_pct,
+          {countif("ca.primary_intent = 'complaint'")}      AS complaints,
+          {countif("ca.primary_intent = 'wrong_item'")}     AS wrong_items,
+          {countif("ca.primary_intent = 'delivery_issue'")} AS delivery_issues
+        FROM call_analysis ca, json_each(ca.restaurant_names) AS r
+        WHERE r.value IS NOT NULL AND TRIM(r.value) != ''
         GROUP BY restaurant ORDER BY total_calls DESC LIMIT 20
     """)
 
     from_orders = []
     try:
-        from_orders = _run(f"""
+        from_orders = db.query(f"""
             SELECT vk.restaurant_name, vk.cuisine,
               COUNT(DISTINCT ca.call_id) AS support_calls,
-              COUNTIF(ca.sentiment = 'negative') AS negative_calls,
-              ROUND(SAFE_DIVIDE(COUNTIF(ca.sentiment='negative'), COUNT(*)) * 100, 1) AS negative_pct,
-              COUNTIF(ca.primary_intent = 'complaint')      AS complaints,
-              COUNTIF(ca.primary_intent = 'wrong_item')     AS wrong_items,
-              COUNTIF(ca.primary_intent = 'delivery_issue') AS delivery_issues,
+              {countif("ca.sentiment = 'negative'")} AS negative_calls,
+              ROUND({safe_divide(countif("ca.sentiment = 'negative'"), "COUNT(*)")} * 100, 1) AS negative_pct,
+              {countif("ca.primary_intent = 'complaint'")}      AS complaints,
+              {countif("ca.primary_intent = 'wrong_item'")}     AS wrong_items,
+              {countif("ca.primary_intent = 'delivery_issue'")} AS delivery_issues,
               ROUND(AVG(vk.feedback_order_rating), 2)    AS avg_order_rating,
               ROUND(AVG(vk.feedback_delivery_rating), 2) AS avg_delivery_rating
-            FROM {T} ca, UNNEST(JSON_VALUE_ARRAY(ca.order_ids)) AS order_id
-            JOIN {VK} vk ON CAST(vk.id AS STRING) = order_id
+            FROM call_analysis ca, json_each(ca.order_ids) AS o
+            JOIN vendor_kpi vk ON CAST(vk.id AS TEXT) = o.value
             WHERE vk.restaurant_name IS NOT NULL AND TRIM(vk.restaurant_name) != ''
             GROUP BY vk.restaurant_name, vk.cuisine ORDER BY support_calls DESC LIMIT 20
         """)
@@ -326,22 +317,20 @@ async def get_restaurant_insights() -> dict:
 # ---------------------------------------------------------------------------
 
 def _get_calls_sync(page: int, page_size: int) -> dict:
-    T, _ = _table_refs()
-    offset = (page - 1) * page_size
+    total = int(db.query_one("SELECT COUNT(*) AS total FROM call_analysis")["total"])
 
-    count_row = _run(f"SELECT COUNT(*) AS total FROM {T}")[0]
-    total = int(count_row["total"])
-
-    rows = _run(f"""
+    rows = db.query(f"""
+        {_MV_WITH}
         SELECT
-          call_id, transcript, intents, primary_intent, sentiment,
-          sentiment_confidence, order_ids, restaurant_names, areas,
-          product_names, qar_amounts, summary,
-          CAST(analysed_at AS STRING) AS analysed_at
-        FROM {T}
-        ORDER BY analysed_at DESC
-        LIMIT {page_size} OFFSET {offset}
-    """)
+          ca.call_id, ca.transcript, ca.intents, ca.primary_intent, ca.sentiment,
+          ca.sentiment_confidence, ca.order_ids, ca.restaurant_names, ca.areas,
+          ca.product_names, ca.qar_amounts, ca.summary,
+          {_VERTICAL} AS vertical,
+          ca.analysed_at
+        FROM call_analysis ca {_CALL_MV_JOIN}
+        ORDER BY ca.analysed_at DESC, ca.call_id
+        LIMIT ? OFFSET ?
+    """, (page_size, (page - 1) * page_size))
 
     items = []
     for row in rows:

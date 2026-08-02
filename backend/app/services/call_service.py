@@ -18,7 +18,7 @@ VALID_INTENTS = {
 VALID_SENTIMENTS = {"positive", "neutral", "negative"}
 
 _PROMPT = """\
-You are an AI analyst for Rafeeq, a food-delivery company in Qatar. Analyse the call-centre transcript below and return structured data.
+You are an AI analyst for Clarity, a food-delivery company in Qatar. Analyse the call-centre transcript below and return structured data.
 
 RULES:
 - Intent and sentiment labels MUST always be in English regardless of the transcript language.

@@ -3,10 +3,11 @@ import { AuthError } from "next-auth"
 import { redirect } from "next/navigation"
 import { signIn } from "@/auth"
 import { ALLOWED_DOMAIN, GOOGLE_ENABLED } from "@/auth.config"
-import { RoleSelect } from "@/components/rafeeq/role-select"
+import { ClarityLogo } from "@/components/clarity/logo"
+import { RoleSelect } from "@/components/clarity/role-select"
 
 export const metadata = {
-  title: "Sign in · Rafeeq Analytics",
+  title: "Sign in · Clarity Analytics",
 }
 
 export default async function LoginPage({
@@ -45,11 +46,7 @@ export default async function LoginPage({
 
       <div className="glass-strong relative z-10 w-full max-w-md rounded-2xl border border-border p-8 shadow-2xl">
         <div className="flex flex-col items-center text-center">
-          <img
-            src="/rafeeq-logotype.svg"
-            alt="Rafeeq"
-            className="h-9 w-auto dark:brightness-125"
-          />
+          <ClarityLogo className="text-3xl" />
           <h1 className="mt-6 text-2xl font-bold tracking-tight text-foreground">
             Admin sign in
           </h1>
@@ -142,7 +139,7 @@ export default async function LoginPage({
       </div>
 
       <p className="absolute bottom-5 left-0 right-0 z-10 text-center text-xs text-muted-foreground">
-        Rafeeq Analytics · All Daily Needs. One Rafeeq.
+        Clarity Analytics · All Call Data. One Clarity.
       </p>
     </main>
   )

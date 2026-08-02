@@ -3,25 +3,28 @@
 import { Suspense, useMemo, useRef, useState, useCallback, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { MessageSquare, Frown, Tag, TrendingUp } from "lucide-react"
-import { Sidebar } from "@/components/rafeeq/sidebar"
-import { Topbar } from "@/components/rafeeq/topbar"
-import { StatCard } from "@/components/rafeeq/stat-card"
-import { MessageFeedTable } from "@/components/rafeeq/message-feed-table"
-import { MessageDetailModal } from "@/components/rafeeq/message-detail-modal"
-import { TopNegativeTriggers } from "@/components/rafeeq/top-negative-triggers"
-import { CrossChannelComparison } from "@/components/rafeeq/cross-channel-comparison"
-import { SentimentByZoneTime } from "@/components/rafeeq/sentiment-by-zone-time"
-import { MessageSentimentTrend } from "@/components/rafeeq/message-sentiment-trend"
-import { MessagesLoading } from "@/components/rafeeq/loading-screen"
-import { RefreshStatus } from "@/components/rafeeq/refresh-status"
-import { GlobalTimeRange } from "@/components/rafeeq/time-range-select"
-import { ThresholdAlert } from "@/components/rafeeq/threshold-alert"
+import { Sidebar } from "@/components/clarity/sidebar"
+import { Topbar, type SearchResult } from "@/components/clarity/topbar"
+import { useDebouncedValue } from "@/lib/use-debounced-value"
+import { StatCard } from "@/components/clarity/stat-card"
+import { MessageFeedTable } from "@/components/clarity/message-feed-table"
+import { MessageDetailModal } from "@/components/clarity/message-detail-modal"
+import { TopNegativeTriggers } from "@/components/clarity/top-negative-triggers"
+import { CrossChannelComparison } from "@/components/clarity/cross-channel-comparison"
+import { SentimentByZoneTime } from "@/components/clarity/sentiment-by-zone-time"
+import { MessageSentimentTrend } from "@/components/clarity/message-sentiment-trend"
+import { MessagesLoading } from "@/components/clarity/loading-screen"
+import { RefreshStatus } from "@/components/clarity/refresh-status"
+import { GlobalTimeRange } from "@/components/clarity/time-range-select"
+import { GlobalVerticalSelect, VerticalBadge } from "@/components/clarity/vertical-select"
+import { ThresholdAlert } from "@/components/clarity/threshold-alert"
 import { useAutoRefresh, useSettings } from "@/lib/settings-context"
 import { useTimeFilter } from "@/lib/time-filter-context"
 import { filterByRange, type TimeRange } from "@/lib/time-range"
 import { useT, useTV } from "@/lib/i18n"
 import { type SupportMessage, type TimeOfDay } from "@/lib/mock-messages"
-import type { Sentiment } from "@/lib/rafeeq-data"
+import type { Sentiment } from "@/lib/clarity-data"
+import { now } from "@/lib/frozen-clock"
 import {
   fetchAllMessagesData,
   clearServerCache,
@@ -30,6 +33,7 @@ import {
   type TrendItem,
   type ZoneItem,
   type TimeItem,
+  type MessageOverview,
 } from "@/lib/api"
 
 function MessagesPageInner() {
@@ -41,6 +45,9 @@ function MessagesPageInner() {
   // /messages?msg=MSG-XXXX and we pop the matching message's detail modal.
   const focusMsgId = searchParams.get("msg")
   const [messages, setMessages] = useState<SupportMessage[]>([])
+  // Full-corpus stats (stat cards, time-of-day, SLA) aggregated in SQL — the
+  // feed above is capped at 1000 rows, so anything derived from it is only a sample.
+  const [overview, setOverview] = useState<MessageOverview | null>(null)
   const [triggers, setTriggers] = useState<TriggerItem[] | undefined>(undefined)
   const [crossChannel, setCrossChannel] = useState<CrossChannelItem[] | undefined>(undefined)
   const [trend, setTrend] = useState<TrendItem[] | undefined>(undefined)
@@ -50,21 +57,23 @@ function MessagesPageInner() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [search, setSearch] = useState("")
   const { settings } = useSettings()
-  const { range, queryKey } = useTimeFilter()
+  const { range, vertical, queryKey } = useTimeFilter()
 
   // Fetch real data from the backend for the given window. `background` skips
   // the full-page skeleton (used by auto-refresh, the manual "Refresh" button,
   // and time-range toggles). The pre-aggregated panels are re-queried per window;
   // the raw feed is filtered client-side below.
-  const loadData = useCallback((r: TimeRange, background = false) => {
+  const loadData = useCallback((r: TimeRange, background = false, bust = false) => {
     if (background) setRefreshing(true)
     else setLoading(true)
-    // A refresh re-reads from BigQuery; bust the server cache first so it does.
-    const ready = background ? clearServerCache() : Promise.resolve()
+    // Only the manual Refresh button busts the server cache — auto-refresh and
+    // window toggles ride the backend's TTL cache so they stay fast.
+    const ready = bust ? clearServerCache() : Promise.resolve()
     ready
-      .then(() => fetchAllMessagesData(r))
+      .then(() => fetchAllMessagesData(r, settings.chatSlaHours, settings.generalSlaHours, vertical))
       .then((result) => {
         setMessages(result.messages ?? [])
+        if (result.overview) setOverview(result.overview)
         if (result.triggers) setTriggers(result.triggers)
         if (result.crossChannel) setCrossChannel(result.crossChannel)
         if (result.trend) setTrend(result.trend)
@@ -75,7 +84,7 @@ function MessagesPageInner() {
         if (background) setRefreshing(false)
         else setLoading(false)
       })
-  }, [])
+  }, [settings.chatSlaHours, settings.generalSlaHours, vertical])
 
   // Initial load (full skeleton) once.
   useEffect(() => {
@@ -83,23 +92,25 @@ function MessagesPageInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Re-query the aggregated panels in the background when the window changes.
+  // Re-query the aggregated panels in the background when the window changes, or
+  // when the SLA thresholds change (they're now applied server-side in the overview).
   const firstRange = useRef(true)
   useEffect(() => {
     if (firstRange.current) { firstRange.current = false; return }
     loadData(range, true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queryKey])
+  }, [queryKey, settings.chatSlaHours, settings.generalSlaHours])
 
   // Re-fetch on the cadence configured on the Settings page.
   useAutoRefresh(() => loadData(range, true))
 
-  // Messages carry a per-record `date`, so the feed, stat cards, time-of-day
-  // breakdown and SLA counts derive from this client-filtered set.
-  const scopedMessages = useMemo(
-    () => filterByRange(messages, range, (m) => m.date),
-    [messages, range],
-  )
+  // Messages carry a per-record `date` and `vertical`, so the feed, stat cards,
+  // time-of-day breakdown and SLA counts derive from this client-filtered set.
+  const scopedMessages = useMemo(() => {
+    const timeScoped = filterByRange(messages, range, (m) => m.date)
+    if (vertical === "all") return timeScoped
+    return timeScoped.filter((m) => m.vertical === vertical)
+  }, [messages, range, vertical])
 
   // Sentiment-spike alert: negative sentiment jumping week-over-week past the
   // configured threshold (Settings → SLA & Alert Configurations).
@@ -126,7 +137,19 @@ function MessagesPageInner() {
   // every historical chat. Still-open chats (no closed_at) fall back to current age.
   // Chat SLA applies to App/WhatsApp, General SLA to Tickets.
   const slaBreach = useMemo(() => {
-    const now = Date.now()
+    const fmt = (ch: string, n: number) => {
+      const sla = ch === "Ticket" ? settings.generalSlaHours : settings.chatSlaHours
+      return t("msg.slaBreachItem", { n, channel: tv(ch), sla })
+    }
+    // Prefer the full-corpus counts from the overview; the client sample is only
+    // a fallback when the backend is unreachable.
+    if (overview) {
+      return overview.slaBreaches
+        .slice()
+        .sort((a, b) => b.count - a.count)
+        .map((b) => fmt(b.channel, b.count))
+    }
+    const nowTs = now().getTime()
     const counts: Record<string, number> = {}
     for (const m of scopedMessages) {
       const startTs = new Date(m.date.replace(" ", "T")).getTime()
@@ -135,18 +158,15 @@ function MessagesPageInner() {
           ? m.handlingMinutes / 60
           : Number.isNaN(startTs)
             ? null
-            : (now - startTs) / 3_600_000
+            : (nowTs - startTs) / 3_600_000
       if (durationHours === null) continue
       const sla = m.channel === "Ticket" ? settings.generalSlaHours : settings.chatSlaHours
       if (durationHours > sla) counts[m.channel] = (counts[m.channel] ?? 0) + 1
     }
     return Object.entries(counts)
       .sort((a, b) => b[1] - a[1])
-      .map(([ch, n]) => {
-        const sla = ch === "Ticket" ? settings.generalSlaHours : settings.chatSlaHours
-        return t("msg.slaBreachItem", { n, channel: tv(ch), sla })
-      })
-  }, [scopedMessages, settings.chatSlaHours, settings.generalSlaHours, t, tv])
+      .map(([ch, n]) => fmt(ch, n))
+  }, [overview, scopedMessages, settings.chatSlaHours, settings.generalSlaHours, t, tv])
 
   // ---------------------------------------------------------------------------
   // Derived stats for the stat cards
@@ -180,6 +200,7 @@ function MessagesPageInner() {
   // Sentiment by time-of-day breakdown (drives the "Sentiment by Time of Day" chart)
   // ---------------------------------------------------------------------------
   const timeOfDayData = useMemo<TimeItem[]>(() => {
+    if (overview) return overview.timeOfDay
     const order: TimeOfDay[] = ["Morning", "Afternoon", "Evening", "Night"]
     return order.map((time) => {
       const subset = scopedMessages.filter((m) => m.timeOfDay === time)
@@ -188,12 +209,20 @@ function MessagesPageInner() {
         Math.round((subset.filter((m) => m.sentiment === s).length / subset.length) * 100)
       return { time, positive: pct("Positive"), neutral: pct("Neutral"), negative: pct("Negative") }
     })
-  }, [scopedMessages])
+  }, [overview, scopedMessages])
 
   // ---------------------------------------------------------------------------
   // Week-over-week message volume change (null when fewer than 2 weeks of data)
   // ---------------------------------------------------------------------------
   const weekOverWeek = useMemo(() => {
+    // Prefer the corpus-wide weekly totals from the sentiment trend; the client
+    // sample (capped feed) is only a fallback when the trend isn't loaded.
+    if (trend && trend.length >= 2) {
+      const current = trend[trend.length - 1].total
+      const previous = trend[trend.length - 2].total
+      if (previous === 0) return null
+      return ((current - previous) / previous) * 100
+    }
     if (scopedMessages.length === 0) return null
     const WEEK_MS = 7 * 24 * 60 * 60 * 1000
     const counts = new Map<number, number>()
@@ -209,7 +238,7 @@ function MessagesPageInner() {
     const previous = counts.get(weeks[1])!
     if (previous === 0) return null
     return ((current - previous) / previous) * 100
-  }, [scopedMessages])
+  }, [trend, scopedMessages])
 
   // ---------------------------------------------------------------------------
   // Messages for the table. Categorical filtering lives in the table's own
@@ -234,12 +263,42 @@ function MessagesPageInner() {
   )
   const closeFocus = useCallback(() => router.replace("/messages", { scroll: false }), [router])
 
+  // Topbar search dropdown — matches within the scoped set; clicking opens the
+  // message's detail modal via the ?msg= focus mechanism above.
+  const { value: debouncedSearch, pending: searchPending } = useDebouncedValue(search)
+  const searchResults = useMemo<SearchResult[]>(() => {
+    const q = debouncedSearch.trim().toLowerCase()
+    if (!q) return []
+    return scopedMessages
+      .filter((m) =>
+        m.id.toLowerCase().includes(q) ||
+        m.customerId.toLowerCase().includes(q) ||
+        m.text.toLowerCase().includes(q) ||
+        m.intent.toLowerCase().includes(q),
+      )
+      .slice(0, 50)
+      .map((m) => ({
+        id: m.id,
+        title: `${m.id} · ${tv(m.intent)}`,
+        subtitle: m.text,
+        badge: tv(m.sentiment),
+        onSelect: () => router.replace(`/messages?msg=${encodeURIComponent(m.id)}`, { scroll: false }),
+      }))
+  }, [debouncedSearch, scopedMessages, router, tv])
+
   return (
     <div className="flex min-h-screen">
       <Sidebar />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar title={t("nav.supportMessages")} search={search} onSearch={setSearch} />
+        <Topbar
+          title={t("nav.supportMessages")}
+          search={search}
+          onSearch={setSearch}
+          searchResults={searchResults}
+          searchLoading={searchPending}
+          searchPlaceholder={t("top.searchMessages")}
+        />
 
         <main className="flex flex-1 flex-col gap-6 p-4 md:p-6">
           
@@ -255,7 +314,9 @@ function MessagesPageInner() {
             </div>
             <div className="flex flex-wrap items-center gap-3 sm:justify-end">
               <GlobalTimeRange className="lg:hidden" />
-              <RefreshStatus lastUpdated={lastUpdated} refreshing={refreshing} onRefresh={() => loadData(range, true)} />
+              {/* Mobile-only: topbar shows the vertical filter on lg+ (avoids a duplicate). */}
+              <GlobalVerticalSelect className="lg:hidden" />
+              <RefreshStatus lastUpdated={lastUpdated} refreshing={refreshing} onRefresh={() => loadData(range, true, true)} />
             </div>
           </div>
 
@@ -266,31 +327,38 @@ function MessagesPageInner() {
           <ThresholdAlert title={t("msg.alertSentimentSpike")} items={sentimentBreach} />
           <ThresholdAlert title={t("msg.alertSlaExceeded")} items={slaBreach} />
 
-          {/* Stat cards */}
+          {/* Stat cards — badge names the vertical the numbers came from:
+              the selected filter, or the dominant vertical when on "all". */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
             <StatCard
               label={t("msg.statTotal")}
-              value={stats.total > 0 ? stats.total.toLocaleString() : "0"}
+              // Full-corpus values come from the server overview; the client
+              // sample (capped 1000-row feed) is only a fallback when it's null.
+              value={(overview?.total ?? stats.total).toLocaleString()}
               trend="neutral"
               icon={MessageSquare}
+              badge={<VerticalBadge vertical={vertical} />}
             />
             <StatCard
               label={t("msg.statNegative")}
-              value={stats.negativeRate}
+              value={overview ? `${overview.negativePct.toFixed(1)}%` : stats.negativeRate}
               trend="up"
               icon={Frown}
+              badge={<VerticalBadge vertical={vertical} />}
             />
             <StatCard
               label={t("msg.statTopIntent")}
-              value={tv(stats.topIntent)}
+              value={tv(overview?.topIntent ?? stats.topIntent)}
               trend="neutral"
               icon={Tag}
+              badge={<VerticalBadge vertical={vertical} />}
             />
             <StatCard
               label={t("msg.statTopChannel")}
-              value={tv(stats.topChannel)}
+              value={tv(overview?.topChannel ?? stats.topChannel)}
               trend="neutral"
               icon={MessageSquare}
+              badge={<VerticalBadge vertical={vertical} />}
             />
             <StatCard
               label={t("msg.statWow")}

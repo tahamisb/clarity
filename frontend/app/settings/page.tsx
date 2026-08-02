@@ -6,11 +6,11 @@ import {
   MessageSquare, Plus, X, Save, Check, Mail, Hash, RefreshCw,
   Bell, Ban, Frown, Lock,
 } from "lucide-react"
-import { Sidebar } from "@/components/rafeeq/sidebar"
-import { Topbar } from "@/components/rafeeq/topbar"
-import { Panel } from "@/components/rafeeq/panel"
-import { ThemeToggle } from "@/components/rafeeq/theme-toggle"
-import { WorkInProgress, WipBadge } from "@/components/rafeeq/work-in-progress"
+import { Sidebar } from "@/components/clarity/sidebar"
+import { Topbar } from "@/components/clarity/topbar"
+import { Panel } from "@/components/clarity/panel"
+import { ThemeToggle } from "@/components/clarity/theme-toggle"
+import { WorkInProgress, WipBadge } from "@/components/clarity/work-in-progress"
 import { REFRESH_OPTIONS, useSettings } from "@/lib/settings-context"
 import { useRole } from "@/lib/use-role"
 import { useT } from "@/lib/i18n"

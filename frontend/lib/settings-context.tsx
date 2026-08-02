@@ -58,7 +58,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   language: "en",
 }
 
-const STORAGE_KEY = "rafeeq.settings.v1"
+const STORAGE_KEY = "clarity.settings.v1"
 
 /** Refresh-interval options surfaced in the Settings UI. */
 export const REFRESH_OPTIONS: { label: string; value: number }[] = [

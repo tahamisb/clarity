@@ -1,286 +1,326 @@
 {
   "by_volume": [
     {
-      "restaurant_name": "AL WAAD RESTAURANT",
-      "total_orders": 2983,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0,
-      "avg_order_value": 60.06
+      "restaurant_name": "Naseem Al Rabeeh",
+      "total_orders": 1096,
+      "cancelled": 163,
+      "cancel_rate_pct": 14.87,
+      "avg_order_value": 64.01,
+      "vertical": "Health & Wellness"
     },
     {
-      "restaurant_name": "CHAATWALA",
-      "total_orders": 1772,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0,
-      "avg_order_value": 42.96
+      "restaurant_name": "Shawarma Time",
+      "total_orders": 1108,
+      "cancelled": 162,
+      "cancel_rate_pct": 14.62,
+      "avg_order_value": 62.66,
+      "vertical": "Restaurants"
     },
     {
-      "restaurant_name": "ISFAHAN NIGHTS",
-      "total_orders": 14359,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0,
-      "avg_order_value": 100.34
+      "restaurant_name": "Bait Al Mandi",
+      "total_orders": 1064,
+      "cancelled": 140,
+      "cancel_rate_pct": 13.16,
+      "avg_order_value": 65.03,
+      "vertical": "Restaurants"
     },
     {
-      "restaurant_name": "CASIO",
-      "total_orders": 446,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0,
-      "avg_order_value": 200.38
+      "restaurant_name": "Vitamin Hub",
+      "total_orders": 993,
+      "cancelled": 138,
+      "cancel_rate_pct": 13.9,
+      "avg_order_value": 65.63,
+      "vertical": "Health & Wellness"
     },
     {
-      "restaurant_name": "39ERCOM",
-      "total_orders": 56504,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0,
-      "avg_order_value": 101.27
+      "restaurant_name": "Golden Wok",
+      "total_orders": 1018,
+      "cancelled": 133,
+      "cancel_rate_pct": 13.06,
+      "avg_order_value": 63.47,
+      "vertical": "Restaurants"
     },
     {
-      "restaurant_name": "CUPCAKE QUEEN",
-      "total_orders": 3323,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0,
-      "avg_order_value": 237.62
+      "restaurant_name": "Wrap It Up",
+      "total_orders": 1029,
+      "cancelled": 130,
+      "cancel_rate_pct": 12.63,
+      "avg_order_value": 63.11,
+      "vertical": "Restaurants"
     },
     {
-      "restaurant_name": "LEMON LIME",
-      "total_orders": 1068,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0,
-      "avg_order_value": 56.98
+      "restaurant_name": "Damascus Gate",
+      "total_orders": 1050,
+      "cancelled": 127,
+      "cancel_rate_pct": 12.1,
+      "avg_order_value": 64.99,
+      "vertical": "Restaurants"
     },
     {
-      "restaurant_name": "BISTROT COFFEE SHOP",
-      "total_orders": 261,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0,
-      "avg_order_value": 41.72
+      "restaurant_name": "LuLu Hypermarket",
+      "total_orders": 1067,
+      "cancelled": 127,
+      "cancel_rate_pct": 11.9,
+      "avg_order_value": 63.89,
+      "vertical": "Grocery"
     },
     {
-      "restaurant_name": "MIFTAH W FINJAN",
-      "total_orders": 2912,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0,
-      "avg_order_value": 166.02
+      "restaurant_name": "Layali Beirut",
+      "total_orders": 1064,
+      "cancelled": 125,
+      "cancel_rate_pct": 11.75,
+      "avg_order_value": 64.08,
+      "vertical": "Restaurants"
     },
     {
-      "restaurant_name": "ISTANBUL CENTRAL RESTAURANT",
-      "total_orders": 1472,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0,
-      "avg_order_value": 46.66
+      "restaurant_name": "Quick Basket",
+      "total_orders": 1023,
+      "cancelled": 125,
+      "cancel_rate_pct": 12.22,
+      "avg_order_value": 64.2,
+      "vertical": "Grocery"
     },
     {
-      "restaurant_name": "SHARQ SPECIALTY COFFEE",
-      "total_orders": 1824,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0,
-      "avg_order_value": 71.96
+      "restaurant_name": "Turkey Central",
+      "total_orders": 1036,
+      "cancelled": 124,
+      "cancel_rate_pct": 11.97,
+      "avg_order_value": 63.25,
+      "vertical": "Restaurants"
     },
     {
-      "restaurant_name": "PHARMACY AND MORE",
-      "total_orders": 36168,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0,
-      "avg_order_value": 120.08
+      "restaurant_name": "Burger Boutique",
+      "total_orders": 1057,
+      "cancelled": 119,
+      "cancel_rate_pct": 11.26,
+      "avg_order_value": 63.25,
+      "vertical": "Restaurants"
     },
     {
-      "restaurant_name": "ORMORE GENEVA RESTAURANT",
-      "total_orders": 10308,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0,
-      "avg_order_value": 130.96
+      "restaurant_name": "Outlet Bazaar",
+      "total_orders": 1023,
+      "cancelled": 118,
+      "cancel_rate_pct": 11.53,
+      "avg_order_value": 63.11,
+      "vertical": "OUTLET"
     },
     {
-      "restaurant_name": "AL NOOF BAKERY",
-      "total_orders": 12562,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0,
-      "avg_order_value": 83.62
+      "restaurant_name": "Sushi Yard",
+      "total_orders": 1049,
+      "cancelled": 118,
+      "cancel_rate_pct": 11.25,
+      "avg_order_value": 64.61,
+      "vertical": "Restaurants"
     },
     {
-      "restaurant_name": "POPEYE ",
-      "total_orders": 8063,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0,
-      "avg_order_value": 79.18
+      "restaurant_name": "Tandoori Nights",
+      "total_orders": 1032,
+      "cancelled": 118,
+      "cancel_rate_pct": 11.43,
+      "avg_order_value": 63.94,
+      "vertical": "Restaurants"
     },
     {
-      "restaurant_name": "PATISSERIE SUISSE",
-      "total_orders": 26761,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0,
-      "avg_order_value": 122.26
+      "restaurant_name": "Kulud Pharmacy",
+      "total_orders": 1085,
+      "cancelled": 116,
+      "cancel_rate_pct": 10.69,
+      "avg_order_value": 63.26,
+      "vertical": "Health & Wellness"
     },
     {
-      "restaurant_name": "ABAJOUR RESTAURANT",
-      "total_orders": 24140,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0,
-      "avg_order_value": 113.26
+      "restaurant_name": "Dana Mini Mart",
+      "total_orders": 1015,
+      "cancelled": 114,
+      "cancel_rate_pct": 11.23,
+      "avg_order_value": 63.44,
+      "vertical": "Grocery"
     },
     {
-      "restaurant_name": "FIRST DAY BURGER",
-      "total_orders": 2733,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0,
-      "avg_order_value": 106.1
+      "restaurant_name": "Barber Lounge",
+      "total_orders": 1067,
+      "cancelled": 111,
+      "cancel_rate_pct": 10.4,
+      "avg_order_value": 65.7,
+      "vertical": "Salons"
     },
     {
-      "restaurant_name": "TRUFFLE BURGER",
-      "total_orders": 1035,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0,
-      "avg_order_value": 71.93
+      "restaurant_name": "Wellcare Pharmacy",
+      "total_orders": 1081,
+      "cancelled": 111,
+      "cancel_rate_pct": 10.27,
+      "avg_order_value": 64.14,
+      "vertical": "Health & Wellness"
     },
     {
-      "restaurant_name": "BARRIO FIESTA",
-      "total_orders": 698,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0,
-      "avg_order_value": 82.3
+      "restaurant_name": "Ehsan Food Bank",
+      "total_orders": 1059,
+      "cancelled": 108,
+      "cancel_rate_pct": 10.2,
+      "avg_order_value": 64.36,
+      "vertical": "Charity"
     }
   ],
   "by_rate": [
     {
-      "restaurant_name": "McDonald's",
-      "total_orders": 1177459,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0,
-      "avg_order_value": 60.97
+      "restaurant_name": "Naseem Al Rabeeh",
+      "total_orders": 1096,
+      "cancelled": 163,
+      "cancel_rate_pct": 14.87,
+      "avg_order_value": 64.01,
+      "vertical": "Health & Wellness"
     },
     {
-      "restaurant_name": "MCDONALDS",
-      "total_orders": 998555,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0,
-      "avg_order_value": 57.13
+      "restaurant_name": "Shawarma Time",
+      "total_orders": 1108,
+      "cancelled": 162,
+      "cancel_rate_pct": 14.62,
+      "avg_order_value": 62.66,
+      "vertical": "Restaurants"
     },
     {
-      "restaurant_name": "KFC",
-      "total_orders": 833088,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0,
-      "avg_order_value": 67.27
+      "restaurant_name": "Vitamin Hub",
+      "total_orders": 993,
+      "cancelled": 138,
+      "cancel_rate_pct": 13.9,
+      "avg_order_value": 65.63,
+      "vertical": "Health & Wellness"
     },
     {
-      "restaurant_name": "AL MEERA",
-      "total_orders": 806395,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0,
-      "avg_order_value": 123.41
+      "restaurant_name": "Bait Al Mandi",
+      "total_orders": 1064,
+      "cancelled": 140,
+      "cancel_rate_pct": 13.16,
+      "avg_order_value": 65.03,
+      "vertical": "Restaurants"
     },
     {
-      "restaurant_name": "TEA TIME",
-      "total_orders": 627203,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0,
-      "avg_order_value": 55.71
+      "restaurant_name": "Golden Wok",
+      "total_orders": 1018,
+      "cancelled": 133,
+      "cancel_rate_pct": 13.06,
+      "avg_order_value": 63.47,
+      "vertical": "Restaurants"
     },
     {
-      "restaurant_name": "KARAK MQANES",
-      "total_orders": 604150,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0,
-      "avg_order_value": 48.8
+      "restaurant_name": "Wrap It Up",
+      "total_orders": 1029,
+      "cancelled": 130,
+      "cancel_rate_pct": 12.63,
+      "avg_order_value": 63.11,
+      "vertical": "Restaurants"
     },
     {
-      "restaurant_name": "GO CRISPY",
-      "total_orders": 433419,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0,
-      "avg_order_value": 77.79
+      "restaurant_name": "Quick Basket",
+      "total_orders": 1023,
+      "cancelled": 125,
+      "cancel_rate_pct": 12.22,
+      "avg_order_value": 64.2,
+      "vertical": "Grocery"
     },
     {
-      "restaurant_name": "PAPA JOHNS",
-      "total_orders": 427461,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0,
-      "avg_order_value": 82.1
+      "restaurant_name": "Damascus Gate",
+      "total_orders": 1050,
+      "cancelled": 127,
+      "cancel_rate_pct": 12.1,
+      "avg_order_value": 64.99,
+      "vertical": "Restaurants"
     },
     {
-      "restaurant_name": "RAFEEQ MART",
-      "total_orders": 353580,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0,
-      "avg_order_value": 78.44
+      "restaurant_name": "Turkey Central",
+      "total_orders": 1036,
+      "cancelled": 124,
+      "cancel_rate_pct": 11.97,
+      "avg_order_value": 63.25,
+      "vertical": "Restaurants"
     },
     {
-      "restaurant_name": "DIET HOUSE",
-      "total_orders": 311559,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0,
-      "avg_order_value": 77.43
+      "restaurant_name": "LuLu Hypermarket",
+      "total_orders": 1067,
+      "cancelled": 127,
+      "cancel_rate_pct": 11.9,
+      "avg_order_value": 63.89,
+      "vertical": "Grocery"
     },
     {
-      "restaurant_name": "HARDEES",
-      "total_orders": 298331,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0,
-      "avg_order_value": 63.5
+      "restaurant_name": "Layali Beirut",
+      "total_orders": 1064,
+      "cancelled": 125,
+      "cancel_rate_pct": 11.75,
+      "avg_order_value": 64.08,
+      "vertical": "Restaurants"
     },
     {
-      "restaurant_name": "JOE AND THE JUICE",
-      "total_orders": 294458,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0,
-      "avg_order_value": 84.65
+      "restaurant_name": "Outlet Bazaar",
+      "total_orders": 1023,
+      "cancelled": 118,
+      "cancel_rate_pct": 11.53,
+      "avg_order_value": 63.11,
+      "vertical": "OUTLET"
     },
     {
-      "restaurant_name": "MONOPRIX",
-      "total_orders": 287452,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0,
-      "avg_order_value": 115.67
+      "restaurant_name": "Tandoori Nights",
+      "total_orders": 1032,
+      "cancelled": 118,
+      "cancel_rate_pct": 11.43,
+      "avg_order_value": 63.94,
+      "vertical": "Restaurants"
     },
     {
-      "restaurant_name": "KULUD PHARMACY",
-      "total_orders": 248168,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0,
-      "avg_order_value": 111.46
+      "restaurant_name": "Burger Boutique",
+      "total_orders": 1057,
+      "cancelled": 119,
+      "cancel_rate_pct": 11.26,
+      "avg_order_value": 63.25,
+      "vertical": "Restaurants"
     },
     {
-      "restaurant_name": "HEALTHY DIET",
-      "total_orders": 238230,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0,
-      "avg_order_value": 74.61
+      "restaurant_name": "Sushi Yard",
+      "total_orders": 1049,
+      "cancelled": 118,
+      "cancel_rate_pct": 11.25,
+      "avg_order_value": 64.61,
+      "vertical": "Restaurants"
     },
     {
-      "restaurant_name": "PAWS",
-      "total_orders": 210626,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0,
-      "avg_order_value": 71.49
+      "restaurant_name": "Dana Mini Mart",
+      "total_orders": 1015,
+      "cancelled": 114,
+      "cancel_rate_pct": 11.23,
+      "avg_order_value": 63.44,
+      "vertical": "Grocery"
     },
     {
-      "restaurant_name": "SUGAR AND SPICE",
-      "total_orders": 191520,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0,
-      "avg_order_value": 111.03
+      "restaurant_name": "Kulud Pharmacy",
+      "total_orders": 1085,
+      "cancelled": 116,
+      "cancel_rate_pct": 10.69,
+      "avg_order_value": 63.26,
+      "vertical": "Health & Wellness"
     },
     {
-      "restaurant_name": "CUBE BURGER PASTA",
-      "total_orders": 189728,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0,
-      "avg_order_value": 85.26
+      "restaurant_name": "Barber Lounge",
+      "total_orders": 1067,
+      "cancelled": 111,
+      "cancel_rate_pct": 10.4,
+      "avg_order_value": 65.7,
+      "vertical": "Salons"
     },
     {
-      "restaurant_name": "AFGHAN BROTHERS",
-      "total_orders": 180980,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0,
-      "avg_order_value": 74.48
+      "restaurant_name": "Clarity Courier",
+      "total_orders": 1037,
+      "cancelled": 107,
+      "cancel_rate_pct": 10.32,
+      "avg_order_value": 63.71,
+      "vertical": "Last Mile"
     },
     {
-      "restaurant_name": "KARAK MARMI",
-      "total_orders": 171049,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0,
-      "avg_order_value": 53.4
+      "restaurant_name": "Wellcare Pharmacy",
+      "total_orders": 1081,
+      "cancelled": 111,
+      "cancel_rate_pct": 10.27,
+      "avg_order_value": 64.14,
+      "vertical": "Health & Wellness"
     }
   ]
 }

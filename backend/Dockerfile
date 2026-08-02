@@ -7,10 +7,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app/ ./app/
 COPY scripts/ ./scripts/
-# Trained model + exploration JSONs (created by the training/exploration scripts).
-# Copied if present so the cancellation predictor can load at startup.
+# Exploration JSONs + (optionally) a trained model, loaded at startup if present.
 COPY artifacts/ ./artifacts/
 
-EXPOSE 8000
+# Build the local SQLite warehouse the whole API reads from. The generator is
+# seeded, so every image gets byte-identical data.
+RUN python scripts/generate_mock_db.py
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+EXPOSE 8001
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001"]

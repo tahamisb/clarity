@@ -48,13 +48,20 @@ export const translations: Dict = {
   "nav.help": { en: "Help", ar: "المساعدة" },
 
   // — Top bar ——————————————————————————————————————————————————————————————
-  "top.brand": { en: "Rafeeq", ar: "رفيق" },
+  "top.brand": { en: "Clarity", ar: "Clarity" },
   "top.searchCalls": { en: "Search calls…", ar: "البحث في المكالمات…" },
+  "top.search": { en: "Search…", ar: "بحث…" },
+  "top.searchMessages": { en: "Search messages…", ar: "البحث في الرسائل…" },
+  "top.searchOrders": { en: "Search orders…", ar: "البحث في الطلبات…" },
   "top.searchAria": {
     en: "Search calls by ID, agent or city",
     ar: "ابحث في المكالمات حسب المعرّف أو الموظّف أو المدينة",
   },
   "top.clearSearch": { en: "Clear search", ar: "مسح البحث" },
+  "search.searching": { en: "Searching…", ar: "جاري البحث…" },
+  "search.noResults": { en: "No matches found", ar: "لا توجد نتائج" },
+  "search.resultsCount": { en: "{n} result(s)", ar: "{n} نتيجة" },
+  "search.more": { en: "+{n} more — refine your search", ar: "+{n} أخرى — حسّن بحثك" },
   "top.accountMenu": { en: "Account menu", ar: "قائمة الحساب" },
   "top.signedIn": { en: "Signed in", ar: "مسجّل الدخول" },
   "top.signOut": { en: "Sign out", ar: "تسجيل الخروج" },
@@ -250,10 +257,12 @@ export const translations: Dict = {
   "integ.configure": { en: "Configure", ar: "تهيئة" },
   "integ.connect": { en: "Connect", ar: "ربط" },
 
-  "set.footer": { en: "Rafeeq Analytics · Settings", ar: "تحليلات رفيق · الإعدادات" },
+  "set.footer": { en: "Clarity Analytics · Settings", ar: "تحليلات Clarity · الإعدادات" },
 
   // — Shared: columns / table chrome ——————————————————————————————————————
   "table.clearFilters": { en: "Clear filters", ar: "مسح الفلاتر" },
+  "table.exportNegative": { en: "Export negative customers", ar: "تصدير العملاء السلبيين" },
+  "table.exportNegativeTitle": { en: "Download a CSV of every customer with negative sentiment in the selected window — for marketing coupon campaigns.", ar: "تنزيل ملف CSV بكل عميل ذي مشاعر سلبية في النطاق المحدد — لحملات كوبونات التسويق." },
   "table.view": { en: "View", ar: "عرض" },
   "table.noCalls": { en: "No calls", ar: "لا مكالمات" },
   "table.noMessages": { en: "No messages", ar: "لا رسائل" },
@@ -312,6 +321,22 @@ export const translations: Dict = {
   "range.short.qtd": { en: "QTD", ar: "الربع" },
   "range.short.ytd": { en: "YTD", ar: "السنة" },
   "range.short.all": { en: "All", ar: "الكل" },
+  // — Verticals (names themselves translate through the tv() value map) —————
+  "vertical.label": { en: "Vertical", ar: "القطاع" },
+  "vertical.all": { en: "All verticals", ar: "كل القطاعات" },
+  "cancel.byVertical": { en: "Cancellation Rate by Vertical", ar: "معدل الإلغاء حسب القطاع" },
+  "cancel.byVerticalDetail": { en: "{cancelled} of {total} orders", ar: "{cancelled} من {total} طلب" },
+
+  // — Hover breakdowns (top contributors to a cancellation stat) ————————————
+  "hover.topMerchants": { en: "Top contributing merchants", ar: "أكثر التجار مساهمة في الإلغاءات" },
+  "hover.topZones": { en: "Top contributing zones", ar: "أكثر المناطق مساهمة في الإلغاءات" },
+  "hover.topVerticals": { en: "Top contributing verticals", ar: "أكثر القطاعات مساهمة في الإلغاءات" },
+
+  "range.custom": { en: "Custom range", ar: "نطاق مخصص" },
+  "range.customTitle": { en: "Pick a date range", ar: "اختر نطاقًا زمنيًا" },
+  "range.start": { en: "Start", ar: "من" },
+  "range.end": { en: "End", ar: "إلى" },
+  "range.apply": { en: "Apply", ar: "تطبيق" },
 
   // — Refresh status ——————————————————————————————————————————————————————
   "refresh.autoRefresh": { en: "Auto-refresh", ar: "تحديث تلقائي" },
@@ -326,12 +351,12 @@ export const translations: Dict = {
   "refresh.refresh": { en: "Refresh", ar: "تحديث" },
 
   // — Hero banner ——————————————————————————————————————————————————————————
-  "hero.badge": { en: "Rafeeq · Qatar", ar: "رفيق · قطر" },
+  "hero.badge": { en: "Clarity · Qatar", ar: "Clarity · قطر" },
   "hero.title1": { en: "All Call Data.", ar: "كل بيانات المكالمات." },
-  "hero.title2": { en: "One Rafeeq.", ar: "رفيق واحد." },
+  "hero.title2": { en: "One Clarity.", ar: "Clarity واحد." },
   "hero.subtitle": {
-    en: "Upload call transcripts and Rafeeq classifies intent, scores emotional tone, and extracts key entities — across every city in Qatar.",
-    ar: "ارفع نصوص المكالمات ليصنّف رفيق النية، ويقيّم النبرة العاطفية، ويستخرج الكيانات الرئيسية — في كل مدينة في قطر.",
+    en: "Upload call transcripts and Clarity classifies intent, scores emotional tone, and extracts key entities — across every city in Qatar.",
+    ar: "ارفع نصوص المكالمات ليصنّف Clarity النية، ويقيّم النبرة العاطفية، ويستخرج الكيانات الرئيسية — في كل مدينة في قطر.",
   },
   "hero.upload": { en: "Upload Transcripts", ar: "رفع النصوص" },
   "hero.accepts": {
@@ -353,8 +378,8 @@ export const translations: Dict = {
   "ci.statNegRate": { en: "Negative Sentiment Rate", ar: "معدل المشاعر السلبية" },
   "ci.statTopCategory": { en: "Top Issue Category", ar: "أبرز فئة مشكلة" },
   "ci.footer": {
-    en: "Rafeeq Call Intelligence · All Daily Needs. One Rafeeq.",
-    ar: "ذكاء مكالمات رفيق · كل الاحتياجات اليومية. رفيق واحد.",
+    en: "Clarity Call Intelligence · All Call Data. One Clarity.",
+    ar: "ذكاء مكالمات Clarity · كل بيانات المكالمات. Clarity واحد.",
   },
   "ci.loadedCalls": { en: "Loaded {n} calls", ar: "تم تحميل {n} مكالمة" },
   "ci.exportedCalls": { en: "Exported {n} calls to CSV", ar: "تم تصدير {n} مكالمة إلى CSV" },
@@ -365,8 +390,8 @@ export const translations: Dict = {
   "ci.analysing": { en: "Analysing {n} transcripts…", ar: "جارٍ تحليل {n} نص…" },
   "ci.added": { en: "Added {n} analysed calls", ar: "تمت إضافة {n} مكالمة محللة" },
   "ci.analysisFailed": {
-    en: "Analysis failed — is the backend running on port 8000?",
-    ar: "فشل التحليل — هل الخادم يعمل على المنفذ 8000؟",
+    en: "Analysis failed — is the backend running on port 8001?",
+    ar: "فشل التحليل — هل الخادم يعمل على المنفذ 8001؟",
   },
 
   // — Charts / panels (Call Intelligence) ——————————————————————————————————
@@ -415,6 +440,7 @@ export const translations: Dict = {
   "cx.totalInteractions": { en: "Total Interactions", ar: "إجمالي التفاعلات" },
   "cx.overallSentiment": { en: "Overall Sentiment", ar: "المشاعر العامة" },
   "cx.cancellationRate": { en: "Cancellation Rate", ar: "معدل الإلغاء" },
+  "cx.contactRate": { en: "Support Contact Rate", ar: "معدل التواصل مع الدعم" },
   "cx.avgResolution": { en: "Avg Resolution Time", ar: "متوسط زمن الحل" },
   "cx.botContainment": { en: "Bot Containment", ar: "احتواء الروبوت" },
   "cx.escalationRate": { en: "Escalation Rate", ar: "معدل التصعيد" },
@@ -425,6 +451,8 @@ export const translations: Dict = {
   "cx.viewFullSentiment": { en: "View Full Sentiment Report", ar: "عرض تقرير المشاعر الكامل" },
   "cx.viewFullCancellation": { en: "View Full Cancellation Report", ar: "عرض تقرير الإلغاءات الكامل" },
   "cx.trainModelDrivers": { en: "Train the model or load cancellation data to see drivers.", ar: "درّب النموذج أو حمّل بيانات الإلغاء لعرض المحركات." },
+  "cx.cancelledBy": { en: "Cancelled By", ar: "أُلغيت بواسطة" },
+  "cx.topDrivers": { en: "Top Cancellation Drivers", ar: "أبرز محركات الإلغاء" },
   "cx.resolutionTime": { en: "Resolution Time", ar: "زمن الحل" },
   "cx.resolutionWip": {
     en: "Resolution-time tracking needs per-ticket open/close timestamps, which aren't ingested yet.",
@@ -450,10 +478,12 @@ export const translations: Dict = {
   "cx.healthFair": { en: "FAIR", ar: "مقبولة" },
   "cx.healthPoor": { en: "POOR", ar: "ضعيفة" },
   "cx.recentTrend": { en: "Recent Trend", ar: "الاتجاه الأخير" },
-  "cx.scoreComposition": { en: "Score Composition Breakdown (Out of 100)", ar: "تفصيل تكوين المؤشر (من 100)" },
-  "cx.compSentiment": { en: "Sentiment (50%)", ar: "المشاعر (50٪)" },
-  "cx.compCancellations": { en: "Cancellations (50%)", ar: "الإلغاءات (50٪)" },
-  "cx.footer": { en: "Rafeeq Analytics · CX Operations Dashboard", ar: "تحليلات رفيق · لوحة عمليات تجربة العملاء" },
+  "cx.scoreComposition": { en: "Behind the Score", ar: "ما وراء المؤشر" },
+  "cx.compSentiment": { en: "Avg sentiment", ar: "متوسط المشاعر" },
+  "cx.compSentimentDetail": { en: "{score} / 10", ar: "{score} / 10" },
+  "cx.compCancellations": { en: "Cancellation rate", ar: "معدل الإلغاء" },
+  "cx.compCancelDetail": { en: "{rate}% of orders", ar: "{rate}٪ من الطلبات" },
+  "cx.footer": { en: "Clarity Analytics · CX Operations Dashboard", ar: "تحليلات Clarity · لوحة عمليات تجربة العملاء" },
   "cx.slaRef": { en: "{n}h SLA", ar: "هدف {n}س" },
   "cx.sentimentInsightEmpty": { en: "Not enough message data yet to surface a sentiment insight.", ar: "لا توجد بيانات رسائل كافية بعد لإظهار رؤية عن المشاعر." },
   "cx.cancelInsightEmpty": { en: "Not enough cancellation data yet to surface a zone insight.", ar: "لا توجد بيانات إلغاء كافية بعد لإظهار رؤية عن المناطق." },
@@ -478,7 +508,7 @@ export const translations: Dict = {
   "msg.statTopIntent": { en: "Most Common Intent", ar: "أكثر النوايا شيوعاً" },
   "msg.statTopChannel": { en: "Most Active Channel", ar: "أكثر القنوات نشاطاً" },
   "msg.statWow": { en: "Week-over-Week Vol", ar: "الحجم الأسبوعي" },
-  "msg.footer": { en: "Rafeeq Call Intelligence · Support Messages", ar: "ذكاء مكالمات رفيق · رسائل الدعم" },
+  "msg.footer": { en: "Clarity Call Intelligence · Support Messages", ar: "ذكاء مكالمات Clarity · رسائل الدعم" },
   "msg.sentimentBreachItem": {
     en: "Negative sentiment up {delta} pts week-over-week ({prev}% → {latest}%, limit {limit} pts)",
     ar: "ارتفعت المشاعر السلبية {delta} نقطة أسبوعياً ({prev}٪ ← {latest}٪، الحد {limit} نقطة)",
@@ -544,6 +574,7 @@ export const translations: Dict = {
   "cancel.modelNotTrained": { en: "The cancellation model has not been trained yet — switch the engine to Gemini for an LLM estimate, or train the model.", ar: "لم يُدرَّب نموذج الإلغاء بعد — بدّل المحرّك إلى Gemini لتقدير بنموذج لغوي، أو درّب النموذج." },
   "cancel.noActiveOrders": { en: "No active orders to score right now.", ar: "لا توجد طلبات نشطة لتقييمها الآن." },
   "cancel.noOrdersMatch": { en: "No orders matching filters.", ar: "لا طلبات مطابقة للفلاتر." },
+  "cancel.queuePageRange": { en: "{from}–{to} of {total} orders", ar: "{from}–{to} من {total} طلب" },
   "cancel.hide": { en: "Hide", ar: "إخفاء" },
   "cancel.explain": { en: "Explain", ar: "تفسير" },
   "cancel.generatingExplanation": { en: "Generating Gemini explanation…", ar: "جارٍ توليد تفسير Gemini…" },
@@ -566,7 +597,7 @@ export const translations: Dict = {
   "cancel.topDrivers": { en: "Top Drivers", ar: "أبرز المحركات" },
   "cancel.actionLabel": { en: "Action: ", ar: "الإجراء: " },
   "cancel.highRiskSegments": { en: "High-Risk Segments", ar: "الشرائح عالية الخطورة" },
-  "cancel.footer": { en: "Rafeeq Analytics · Cancellation Intelligence", ar: "تحليلات رفيق · ذكاء الإلغاءات" },
+  "cancel.footer": { en: "Clarity Analytics · Cancellation Intelligence", ar: "تحليلات Clarity · ذكاء الإلغاءات" },
   "engine.mlModel": { en: "the ML model", ar: "نموذج التعلّم الآلي" },
 
   // Cancellation chat
@@ -653,7 +684,7 @@ export const translations: Dict = {
   "help.feedbackPlaceholder": { en: "Describe the issue, the page it occurred on, and what you expected to happen…", ar: "صف المشكلة، والصفحة التي حدثت فيها، وما الذي توقّعت حدوثه…" },
   "help.submitted": { en: "Submitted", ar: "تم الإرسال" },
   "help.submit": { en: "Submit", ar: "إرسال" },
-  "help.footer": { en: "Rafeeq Analytics · Help & Documentation", ar: "تحليلات رفيق · المساعدة والتوثيق" },
+  "help.footer": { en: "Clarity Analytics · Help & Documentation", ar: "تحليلات Clarity · المساعدة والتوثيق" },
   "help.metric.cancelRate": { en: "Cancellation Rate", ar: "معدل الإلغاء" },
   "help.metric.cancelRateHow": { en: "Cancelled orders ÷ total placed orders in the period, expressed as a %. Computed per zone and per merchant from the vendor_kpi feed.", ar: "الطلبات الملغاة ÷ إجمالي الطلبات في الفترة، كنسبة مئوية. تُحسب لكل منطقة ولكل تاجر من تغذية vendor_kpi." },
   "help.metric.wow": { en: "WoW Trend", ar: "الاتجاه الأسبوعي" },
@@ -675,8 +706,8 @@ export const translations: Dict = {
   "help.faq.a4": { en: "They are separate channels with independent ingestion. The Cross-Channel panel on Support Messages reconciles shared intents across both.", ar: "هما قناتان منفصلتان باستيعاب مستقل. تُوفّق لوحة «بين القنوات» في رسائل الدعم بين النوايا المشتركة بينهما." },
 
   // — Chatbot page ————————————————————————————————————————————————————————
-  "bot.title": { en: "Rafeeq Chatbot", ar: "روبوت رفيق" },
-  "bot.greeting": { en: "Hello, I'm Rafeeq Intelligence", ar: "مرحباً، أنا ذكاء رفيق" },
+  "bot.title": { en: "Clarity Chatbot", ar: "روبوت Clarity" },
+  "bot.greeting": { en: "Hello, I'm Clarity Intelligence", ar: "مرحباً، أنا ذكاء Clarity" },
   "bot.intro": { en: "I can analyze your dashboard data, summarize sentiment trends, and provide insights. How can I help you today?", ar: "يمكنني تحليل بيانات لوحتك، وتلخيص اتجاهات المشاعر، وتقديم الرؤى. كيف يمكنني مساعدتك اليوم؟" },
   "bot.suggestion1": { en: "Summarize the latest sentiment trends", ar: "لخّص أحدث اتجاهات المشاعر" },
   "bot.suggestion2": { en: "Which areas have the most complaints?", ar: "أي المناطق بها أكثر الشكاوى؟" },
@@ -685,7 +716,7 @@ export const translations: Dict = {
   "bot.analyzing": { en: "Analyzing dashboard data...", ar: "جارٍ تحليل بيانات اللوحة..." },
   "bot.attachImage": { en: "Attach Image", ar: "إرفاق صورة" },
   "bot.voiceInput": { en: "Voice Input", ar: "إدخال صوتي" },
-  "bot.placeholder": { en: "Ask Rafeeq about the dashboard data...", ar: "اسأل رفيق عن بيانات اللوحة..." },
+  "bot.placeholder": { en: "Ask Clarity about the dashboard data...", ar: "اسأل Clarity عن بيانات اللوحة..." },
   "bot.disclaimer": { en: "AI can make mistakes. Consider verifying important information with the raw analytics tables.", ar: "قد يخطئ الذكاء الاصطناعي. ننصح بالتحقق من المعلومات المهمة من جداول التحليلات الأصلية." },
   "bot.error": { en: "Sorry, I encountered an error. Please try again later.", ar: "عذراً، واجهت خطأً. يرجى المحاولة لاحقاً." },
   "bot.speechUnsupported": { en: "Speech recognition is not supported in your browser.", ar: "التعرّف على الكلام غير مدعوم في متصفحك." },
@@ -756,6 +787,11 @@ const valueTranslations: Record<string, string> = {
   auto: "تلقائي",
   model: "نموذج",
   gemini: "Gemini",
+  // Cancellation actors (who cancelled the order)
+  Customer: "العميل",
+  Vendor: "التاجر",
+  Clarity: "Clarity",
+  Unknown: "غير معروف",
   // Zone/category scope (CX)
   "All Zones": "كل المناطق",
   "All Categories": "كل الفئات",
@@ -774,6 +810,20 @@ const valueTranslations: Record<string, string> = {
   Grocery: "بقالة",
   Pharmacy: "صيدلية",
   "Dark Kitchen": "مطبخ مظلم",
+  // Verticals (filter options / badges / breakdown rows)
+  Restaurants: "المطاعم",
+  Market: "السوق",
+  "Health & Wellness": "الصحة والعافية",
+  Stars: "النجوم",
+  Flowers: "الزهور",
+  Charity: "الأعمال الخيرية",
+  "Last Mile": "الميل الأخير",
+  Pets: "الحيوانات الأليفة",
+  "Pet Grooming": "العناية بالحيوانات",
+  Events: "الفعاليات",
+  Salons: "الصالونات",
+  OUTLET: "أوتلت",
+  Other: "أخرى",
   // Day-of-week abbreviations (cancellations bar chart)
   Mon: "إثنين",
   Tue: "ثلاثاء",

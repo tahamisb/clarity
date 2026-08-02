@@ -7,34 +7,38 @@ import {
   type CallRecord,
   type Sentiment,
   type Category,
-} from "@/lib/rafeeq-data"
+} from "@/lib/clarity-data"
 import { fetchCalls, clearServerCache } from "@/lib/api"
-import { Sidebar } from "@/components/rafeeq/sidebar"
-import { Topbar } from "@/components/rafeeq/topbar"
-import { HeroBanner } from "@/components/rafeeq/hero-banner"
-import { StatCard } from "@/components/rafeeq/stat-card"
-import { FilterBar, type CallFilters } from "@/components/rafeeq/filter-bar"
-import { QatarMap } from "@/components/rafeeq/qatar-map"
-import { CallTable } from "@/components/rafeeq/call-table"
-import { ToneChart } from "@/components/rafeeq/tone-chart"
-import { CategoryBreakdown } from "@/components/rafeeq/category-breakdown"
-import { IntentPanel } from "@/components/rafeeq/intent-panel"
-import { SentimentTrend } from "@/components/rafeeq/sentiment-trend"
-import { TopTopics } from "@/components/rafeeq/top-topics"
-import { CallAnalysisLoading } from "@/components/rafeeq/loading-screen"
-import { RefreshStatus } from "@/components/rafeeq/refresh-status"
-import { GlobalTimeRange } from "@/components/rafeeq/time-range-select"
+import { Sidebar } from "@/components/clarity/sidebar"
+import { Topbar, type SearchResult } from "@/components/clarity/topbar"
+import { CallDetailModal } from "@/components/clarity/call-detail-modal"
+import { useDebouncedValue } from "@/lib/use-debounced-value"
+import { HeroBanner } from "@/components/clarity/hero-banner"
+import { StatCard } from "@/components/clarity/stat-card"
+import { FilterBar, type CallFilters } from "@/components/clarity/filter-bar"
+import { QatarMap } from "@/components/clarity/qatar-map"
+import { CallTable } from "@/components/clarity/call-table"
+import { ToneChart } from "@/components/clarity/tone-chart"
+import { CategoryBreakdown } from "@/components/clarity/category-breakdown"
+import { IntentPanel } from "@/components/clarity/intent-panel"
+import { SentimentTrend } from "@/components/clarity/sentiment-trend"
+import { TopTopics } from "@/components/clarity/top-topics"
+import { CallAnalysisLoading } from "@/components/clarity/loading-screen"
+import { RefreshStatus } from "@/components/clarity/refresh-status"
+import { GlobalTimeRange } from "@/components/clarity/time-range-select"
+import { GlobalVerticalSelect, VerticalBadge } from "@/components/clarity/vertical-select"
 import { useAutoRefresh } from "@/lib/settings-context"
 import { useTimeFilter } from "@/lib/time-filter-context"
 import { filterByRange } from "@/lib/time-range"
 import { useT, useTV } from "@/lib/i18n"
+import { todayStr } from "@/lib/frozen-clock"
 
 const CATEGORIES = [
   "Billing", "Technical", "Roaming", "Account Access", "Returns", "Complaints", "General",
 ]
 const SENTIMENTS = ["Positive", "Neutral", "Negative"]
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8001"
 
 // ---------------------------------------------------------------------------
 // API response type
@@ -130,16 +134,16 @@ function extractStrings(val: unknown, minLen = 20): string[] {
 
 async function parseFile(file: File): Promise<string[]> {
   const text = await file.text()
-  console.log(`[Rafeeq] Parsing "${file.name}" (${file.size} bytes)`)
+  console.log(`[Clarity] Parsing "${file.name}" (${file.size} bytes)`)
 
   if (file.name.endsWith(".json")) {
     let parsed: unknown
     try { parsed = JSON.parse(text) } catch (err) {
-      console.error("[Rafeeq] JSON parse error:", err)
+      console.error("[Clarity] JSON parse error:", err)
       return []
     }
     const results = extractStrings(parsed)
-    console.log(`[Rafeeq] Extracted ${results.length} transcript(s) from JSON`)
+    console.log(`[Clarity] Extracted ${results.length} transcript(s) from JSON`)
     return results
   }
 
@@ -157,12 +161,12 @@ async function parseFile(file: File): Promise<string[]> {
       const cols = line.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/)
       return (cols[idx] ?? "").replace(/^"|"$/g, "").trim()
     }).filter((s) => s.length >= 20)
-    console.log(`[Rafeeq] Extracted ${results.length} transcript(s) from CSV (col ${idx})`)
+    console.log(`[Clarity] Extracted ${results.length} transcript(s) from CSV (col ${idx})`)
     return results
   }
 
   const trimmed = text.trim()
-  console.log(`[Rafeeq] Using .txt as single transcript (${trimmed.length} chars)`)
+  console.log(`[Clarity] Using .txt as single transcript (${trimmed.length} chars)`)
   return trimmed ? [trimmed] : []
 }
 
@@ -179,6 +183,7 @@ export default function Page() {
   const [analysing, setAnalysing] = useState(false)
   const [intentFilter, setIntentFilter] = useState<string | null>(null)
   const [search, setSearch] = useState("")
+  const [activeSearchCall, setActiveSearchCall] = useState<CallRecord | null>(null)
   const [filters, setFilters] = useState<CallFilters>({ category: null, sentiment: null, agent: null })
   const [toast, setToast] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -188,14 +193,15 @@ export default function Page() {
     window.setTimeout(() => setToast(null), 3200)
   }, [])
 
-  // Load existing calls from BigQuery. `background` skips the full-page skeleton
+  // Load existing analysed calls. `background` skips the full-page skeleton
   // (used by auto-refresh and the manual "Refresh" button).
   const loadData = useCallback(
-    (background = false) => {
+    (background = false, bust = false) => {
       if (background) setRefreshing(true)
       else setLoading(true)
-      // A refresh re-reads from BigQuery; bust the server cache first so it does.
-      const ready = background ? clearServerCache() : Promise.resolve()
+      // Only the manual Refresh button busts the server cache — auto-refresh
+      // rides the backend's TTL cache so it stays fast.
+      const ready = bust ? clearServerCache() : Promise.resolve()
       ready.then(fetchCalls).then((data) => {
         if (data?.length) {
           setCalls(data)
@@ -216,13 +222,16 @@ export default function Page() {
   // Re-fetch on the cadence configured on the Settings page.
   useAutoRefresh(() => loadData(true))
 
-  // Global time-range filter. Calls carry a per-record `datetime`, so the whole
-  // page (stats, charts, map, table) derives from this client-filtered set.
-  const { range } = useTimeFilter()
-  const scopedCalls = useMemo(
-    () => filterByRange(calls, range, (c) => c.datetime),
-    [calls, range],
-  )
+  // Global time-range + vertical filters. Calls carry per-record `datetime` and
+  // `vertical`, so the whole page (stats, charts, map, table) derives from this
+  // client-filtered set.
+  const { range, vertical } = useTimeFilter()
+  const scopedCalls = useMemo(() => {
+    const timeScoped = filterByRange(calls, range, (c) => c.datetime)
+    if (vertical === "all") return timeScoped
+    return timeScoped.filter((c) => c.vertical === vertical)
+  }, [calls, range, vertical])
+
 
   // ---------------------------------------------------------------------------
   // Unique agent names extracted from actual call data
@@ -273,6 +282,29 @@ export default function Page() {
     })
   }, [scopedCalls, filters, intentFilter, search])
 
+  // Topbar search dropdown — matches within the scoped calls; clicking opens the
+  // call's detail modal (rendered below).
+  const { value: debouncedSearch, pending: searchPending } = useDebouncedValue(search)
+  const searchResults = useMemo<SearchResult[]>(() => {
+    const q = debouncedSearch.trim().toLowerCase()
+    if (!q) return []
+    return scopedCalls
+      .filter((c) =>
+        c.id.toLowerCase().includes(q) ||
+        c.agent.toLowerCase().includes(q) ||
+        c.city.toLowerCase().includes(q) ||
+        c.intent.toLowerCase().includes(q),
+      )
+      .slice(0, 50)
+      .map((c) => ({
+        id: c.id,
+        title: `${c.id} · ${tv(c.intent)}`,
+        subtitle: `${c.agent} · ${c.city}`,
+        badge: tv(c.sentiment),
+        onSelect: () => setActiveSearchCall(c),
+      }))
+  }, [debouncedSearch, scopedCalls, tv])
+
   const resetFilters = useCallback(() => {
     setFilters({ category: null, sentiment: null, agent: null })
     setIntentFilter(null)
@@ -292,7 +324,7 @@ export default function Page() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
-    a.download = `rafeeq-calls-${new Date().toISOString().slice(0, 10)}.csv`
+    a.download = `clarity-calls-${todayStr()}.csv`
     a.click()
     URL.revokeObjectURL(url)
     showToast(t("ci.exportedCalls", { n: filteredCalls.length }))
@@ -310,7 +342,7 @@ export default function Page() {
       const transcripts: string[] = []
       for (const file of files) transcripts.push(...(await parseFile(file)))
 
-      console.log(`[Rafeeq] Total transcripts to analyse: ${transcripts.length}`)
+      console.log(`[Clarity] Total transcripts to analyse: ${transcripts.length}`)
 
       if (transcripts.length === 0) {
         showToast(t("ci.noTranscripts"))
@@ -352,7 +384,17 @@ export default function Page() {
       <Sidebar />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar title={t("nav.callIntelligence")} search={search} onSearch={setSearch} />
+        <Topbar
+          title={t("nav.callIntelligence")}
+          search={search}
+          onSearch={setSearch}
+          searchResults={searchResults}
+          searchLoading={searchPending}
+          searchPlaceholder={t("top.searchCalls")}
+        />
+        {activeSearchCall && (
+          <CallDetailModal call={activeSearchCall} onClose={() => setActiveSearchCall(null)} />
+        )}
 
         <main className="flex flex-1 flex-col gap-6 p-4 md:p-6">
           <HeroBanner onUpload={() => fileInputRef.current?.click()} />
@@ -367,7 +409,9 @@ export default function Page() {
 
           <div className="flex flex-wrap items-center justify-end gap-3">
             <GlobalTimeRange className="lg:hidden" />
-            <RefreshStatus lastUpdated={lastUpdated} refreshing={refreshing} onRefresh={() => loadData(true)} />
+            {/* Mobile-only: topbar shows the vertical filter on lg+ (avoids a duplicate). */}
+            <GlobalVerticalSelect className="lg:hidden" />
+            <RefreshStatus lastUpdated={lastUpdated} refreshing={refreshing} onRefresh={() => loadData(true, true)} />
           </div>
 
           {loading ? (
@@ -381,24 +425,28 @@ export default function Page() {
               value={stats.total > 0 ? stats.total.toLocaleString() : "0"}
               trend="neutral"
               icon={PhoneCall}
+              badge={<VerticalBadge vertical={vertical} />}
             />
             <StatCard
               label={t("ci.statAvgDuration")}
               value={stats.avgDuration}
               trend="neutral"
               icon={Clock}
+              badge={<VerticalBadge vertical={vertical} />}
             />
             <StatCard
               label={t("ci.statNegRate")}
               value={stats.negativeRate}
               trend="neutral"
               icon={Frown}
+              badge={<VerticalBadge vertical={vertical} />}
             />
             <StatCard
               label={t("ci.statTopCategory")}
               value={tv(stats.topCategory)}
               trend="neutral"
               icon={Flame}
+              badge={<VerticalBadge vertical={vertical} />}
             />
           </div>
 

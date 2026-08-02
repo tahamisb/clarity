@@ -19,10 +19,11 @@ import logging
 import time
 from pathlib import Path
 
-from app.config import get_settings
-from app.services.bq_client import get_client
+from app.services import local_db as db
 from app.services.chat_service import chat_with_data
 from app.services.gemini_service import call_with_retry
+from app.services.local_db import countif, safe_divide
+from app.services.verticals import normalize, vertical_case, vertical_pred
 from app.utils.helpers import extract_json, utcnow_iso
 
 logger = logging.getLogger(__name__)
@@ -32,10 +33,7 @@ REPORT_PATH = ARTIFACTS_DIR / "cancellation_drivers_report.json"
 FEATURE_IMPORTANCE_PATH = ARTIFACTS_DIR / "feature_importance.json"
 THRESHOLD_ANALYSIS_PATH = ARTIFACTS_DIR / "threshold_analysis.json"
 
-
-def _T() -> str:
-    s = get_settings()
-    return f"`{s.gcp_project_id}.{s.bq_calls_dataset}.vendor_kpi`"
+_T = "vendor_kpi"
 
 
 # Cancellation detection is tolerant of casing/spelling variants in order_status
@@ -51,14 +49,55 @@ def _date_pred(start: str | None, end: str | None, col: str = "order_placement_d
     """
     parts: list[str] = []
     if start:
-        parts.append(f"{col} >= DATE('{start}')")
+        parts.append(f"{col} >= date('{start}')")
     if end:
-        parts.append(f"{col} <= DATE('{end}')")
+        parts.append(f"{col} <= date('{end}')")
     return (" AND " + " AND ".join(parts)) if parts else ""
 
 
+# Internal QA/testing accounts (confirmed by ops) — excluded from every
+# cancellation analytics query so their near-100% cancel rates don't skew
+# rates or the Gemini drivers report. Exact names only: many legitimate
+# first-party storefronts are also named "Clarity …".
+_EXCLUDE_INTERNAL = (
+    " AND (restaurant_name IS NULL"
+    " OR LOWER(TRIM(restaurant_name)) NOT IN ('clarity res', 'testnot'))"
+)
+
+
+def _preds(start: str | None, end: str | None, vertical: str | None = None) -> str:
+    """Combined date + vertical + internal-account WHERE fragment
+    (vertical whitelisted by the router)."""
+    return _date_pred(start, end) + vertical_pred(vertical) + _EXCLUDE_INTERNAL
+
+
+# Dominant vertical of a merchant/zone group — normalized python-side.
+_TOP_PLATFORM = "mode_value(platform_name) AS raw_platform"
+
+# Cancellation count / rate — repeated in nearly every breakdown below.
+_N_CANCELLED = countif(_CANCELLED)
+_RATE_PCT = f"ROUND({safe_divide(_N_CANCELLED, 'COUNT(*)')} * 100, 2)"
+
+# EXTRACT(HOUR FROM order_placement_time) over the stored 'HH:MM:SS' text.
+_ORDER_HOUR = "CAST(substr(order_placement_time, 1, 2) AS INTEGER)"
+
+_TIME_BUCKET = f"""CASE
+              WHEN {_ORDER_HOUR} BETWEEN 6  AND 10 THEN 'Morning'
+              WHEN {_ORDER_HOUR} BETWEEN 11 AND 13 THEN 'Lunch'
+              WHEN {_ORDER_HOUR} BETWEEN 14 AND 16 THEN 'Afternoon'
+              WHEN {_ORDER_HOUR} BETWEEN 17 AND 20 THEN 'Dinner'
+              ELSE 'Late Night'
+            END"""
+
+
+def _with_vertical(rows: list[dict]) -> list[dict]:
+    for r in rows:
+        r["vertical"] = normalize(r.pop("raw_platform", None))
+    return rows
+
+
 def _run(sql: str) -> list[dict]:
-    return [dict(r) for r in get_client().query(sql).result()]
+    return db.query(sql)
 
 
 # ---------------------------------------------------------------------------
@@ -89,173 +128,291 @@ def clear_cache() -> None:
 # Exploration analytics — one function per artifact JSON
 # ---------------------------------------------------------------------------
 
-def _trend_sync(start: str | None = None, end: str | None = None) -> dict:
-    pred = _date_pred(start, end)
-    monthly = _run(f"""
-        SELECT FORMAT_DATE('%Y-%m', order_placement_date) AS period,
-          COUNT(*)                                                                  AS total_orders,
-          COUNTIF(LOWER(TRIM(order_status)) LIKE '%cancel%')                                       AS cancelled,
-          ROUND(SAFE_DIVIDE(COUNTIF(LOWER(TRIM(order_status)) LIKE '%cancel%'), COUNT(*)) * 100, 2)  AS cancel_rate_pct
-        FROM {_T()}
-        WHERE order_placement_date IS NOT NULL{pred}
-        GROUP BY period ORDER BY period
-    """)
-    weekly = _run(f"""
-        SELECT FORMAT_DATE('%G-W%V', order_placement_date) AS period,
-          COUNT(*)                                                                  AS total_orders,
-          COUNTIF(LOWER(TRIM(order_status)) LIKE '%cancel%')                                       AS cancelled,
-          ROUND(SAFE_DIVIDE(COUNTIF(LOWER(TRIM(order_status)) LIKE '%cancel%'), COUNT(*)) * 100, 2)  AS cancel_rate_pct
-        FROM {_T()}
-        WHERE order_placement_date IS NOT NULL{pred}
-        GROUP BY period ORDER BY period
-    """)
-    return {"monthly": monthly, "weekly": weekly}
+def _trend_sync(start: str | None = None, end: str | None = None, vertical: str | None = None) -> dict:
+    pred = _preds(start, end, vertical)
+
+    def q(period: str) -> list[dict]:
+        return _run(f"""
+            SELECT {period} AS period,
+              COUNT(*)      AS total_orders,
+              {_N_CANCELLED} AS cancelled,
+              {_RATE_PCT}    AS cancel_rate_pct
+            FROM {_T}
+            WHERE order_placement_date IS NOT NULL{pred}
+            GROUP BY period ORDER BY period
+        """)
+    return {
+        "monthly": q("strftime('%Y-%m', order_placement_date)"),
+        "weekly": q("iso_week(order_placement_date)"),
+    }
 
 
-def _by_merchant_sync(start: str | None = None, end: str | None = None) -> dict:
-    pred = _date_pred(start, end)
+def _by_merchant_sync(start: str | None = None, end: str | None = None, vertical: str | None = None) -> dict:
+    pred = _preds(start, end, vertical)
     base = f"""
         SELECT restaurant_name,
-          COUNT(*)                                                                  AS total_orders,
-          COUNTIF(LOWER(TRIM(order_status)) LIKE '%cancel%')                                       AS cancelled,
-          ROUND(SAFE_DIVIDE(COUNTIF(LOWER(TRIM(order_status)) LIKE '%cancel%'), COUNT(*)) * 100, 2)  AS cancel_rate_pct,
-          ROUND(AVG(total_order_value), 2)                                          AS avg_order_value
-        FROM {_T()}
+          {_TOP_PLATFORM},
+          COUNT(*)       AS total_orders,
+          {_N_CANCELLED} AS cancelled,
+          {_RATE_PCT}    AS cancel_rate_pct,
+          ROUND(AVG(total_order_value), 2) AS avg_order_value
+        FROM {_T}
         WHERE restaurant_name IS NOT NULL AND TRIM(restaurant_name) != ''{pred}
         GROUP BY restaurant_name
         HAVING total_orders >= 30
     """
-    by_volume = _run(f"{base} ORDER BY cancelled DESC LIMIT 20")
-    by_rate = _run(f"{base} ORDER BY cancel_rate_pct DESC, total_orders DESC LIMIT 20")
+    by_volume = _with_vertical(_run(f"{base} ORDER BY cancelled DESC LIMIT 20"))
+    by_rate = _with_vertical(_run(f"{base} ORDER BY cancel_rate_pct DESC, total_orders DESC LIMIT 20"))
     return {"by_volume": by_volume, "by_rate": by_rate}
 
 
-def _by_zone_sync(start: str | None = None, end: str | None = None) -> dict:
-    pred = _date_pred(start, end)
+def _by_zone_sync(start: str | None = None, end: str | None = None, vertical: str | None = None) -> dict:
+    pred = _preds(start, end, vertical)
 
     def q(col: str) -> list[dict]:
-        return _run(f"""
+        return _with_vertical(_run(f"""
             SELECT {col} AS zone,
-              COUNT(*)                                                                  AS total_orders,
-              COUNTIF(LOWER(TRIM(order_status)) LIKE '%cancel%')                                       AS cancelled,
-              ROUND(SAFE_DIVIDE(COUNTIF(LOWER(TRIM(order_status)) LIKE '%cancel%'), COUNT(*)) * 100, 2)  AS cancel_rate_pct
-            FROM {_T()}
-            WHERE {col} IS NOT NULL AND TRIM(CAST({col} AS STRING)) != ''{pred}
+              {_TOP_PLATFORM},
+              COUNT(*)       AS total_orders,
+              {_N_CANCELLED} AS cancelled,
+              {_RATE_PCT}    AS cancel_rate_pct
+            FROM {_T}
+            WHERE {col} IS NOT NULL AND TRIM(CAST({col} AS TEXT)) != ''{pred}
             GROUP BY zone
             HAVING total_orders >= 20
             ORDER BY total_orders DESC LIMIT 30
-        """)
+        """))
     return {"by_zone_name": q("zone_name"), "by_customer_zone": q("customer_zone")}
 
 
-def _by_time_sync(start: str | None = None, end: str | None = None) -> list[dict]:
-    pred = _date_pred(start, end)
+def _by_time_sync(start: str | None = None, end: str | None = None, vertical: str | None = None) -> list[dict]:
+    pred = _preds(start, end, vertical)
     return _run(f"""
         WITH bucketed AS (
-          SELECT order_status,
-            CASE
-              WHEN EXTRACT(HOUR FROM order_placement_time) BETWEEN 6  AND 10 THEN 'Morning'
-              WHEN EXTRACT(HOUR FROM order_placement_time) BETWEEN 11 AND 13 THEN 'Lunch'
-              WHEN EXTRACT(HOUR FROM order_placement_time) BETWEEN 14 AND 16 THEN 'Afternoon'
-              WHEN EXTRACT(HOUR FROM order_placement_time) BETWEEN 17 AND 20 THEN 'Dinner'
-              ELSE 'Late Night'
-            END AS time_bucket
-          FROM {_T()}
+          SELECT order_status, {_TIME_BUCKET} AS time_bucket
+          FROM {_T}
           WHERE order_placement_time IS NOT NULL{pred}
         )
         SELECT time_bucket,
-          COUNT(*)                                                                  AS total_orders,
-          COUNTIF(LOWER(TRIM(order_status)) LIKE '%cancel%')                                       AS cancelled,
-          ROUND(SAFE_DIVIDE(COUNTIF(LOWER(TRIM(order_status)) LIKE '%cancel%'), COUNT(*)) * 100, 2)  AS cancel_rate_pct
+          COUNT(*)       AS total_orders,
+          {_N_CANCELLED} AS cancelled,
+          {_RATE_PCT}    AS cancel_rate_pct
         FROM bucketed
         GROUP BY time_bucket
         ORDER BY cancel_rate_pct DESC
     """)
 
 
-def _by_dow_sync(start: str | None = None, end: str | None = None) -> list[dict]:
-    pred = _date_pred(start, end)
+def _by_dow_sync(start: str | None = None, end: str | None = None, vertical: str | None = None) -> list[dict]:
+    pred = _preds(start, end, vertical)
     return _run(f"""
-        SELECT FORMAT_DATE('%A', order_placement_date)  AS day_of_week,
-          EXTRACT(DAYOFWEEK FROM order_placement_date)  AS dow_index,
-          COUNT(*)                                                                  AS total_orders,
-          COUNTIF(LOWER(TRIM(order_status)) LIKE '%cancel%')                                       AS cancelled,
-          ROUND(SAFE_DIVIDE(COUNTIF(LOWER(TRIM(order_status)) LIKE '%cancel%'), COUNT(*)) * 100, 2)  AS cancel_rate_pct
-        FROM {_T()}
+        SELECT day_name(order_placement_date) AS day_of_week,
+          CAST(strftime('%w', order_placement_date) AS INTEGER) + 1 AS dow_index,
+          COUNT(*)       AS total_orders,
+          {_N_CANCELLED} AS cancelled,
+          {_RATE_PCT}    AS cancel_rate_pct
+        FROM {_T}
         WHERE order_placement_date IS NOT NULL{pred}
         GROUP BY day_of_week, dow_index
         ORDER BY dow_index
     """)
 
 
-def _by_order_size_sync(start: str | None = None, end: str | None = None) -> list[dict]:
-    pred = _date_pred(start, end)
+def _by_order_size_sync(start: str | None = None, end: str | None = None, vertical: str | None = None) -> list[dict]:
+    pred = _preds(start, end, vertical)
     return _run(f"""
         WITH q AS (
           SELECT total_order_value, order_status,
             NTILE(4) OVER (ORDER BY total_order_value) AS quartile
-          FROM {_T()}
+          FROM {_T}
           WHERE total_order_value IS NOT NULL{pred}
         )
         SELECT quartile,
-          COUNT(*)                                                                  AS total_orders,
-          COUNTIF(LOWER(TRIM(order_status)) LIKE '%cancel%')                                       AS cancelled,
-          ROUND(SAFE_DIVIDE(COUNTIF(LOWER(TRIM(order_status)) LIKE '%cancel%'), COUNT(*)) * 100, 2)  AS cancel_rate_pct,
-          ROUND(MIN(total_order_value), 2)                                          AS min_value,
-          ROUND(MAX(total_order_value), 2)                                          AS max_value
+          COUNT(*)       AS total_orders,
+          {_N_CANCELLED} AS cancelled,
+          {_RATE_PCT}    AS cancel_rate_pct,
+          ROUND(MIN(total_order_value), 2) AS min_value,
+          ROUND(MAX(total_order_value), 2) AS max_value
         FROM q GROUP BY quartile ORDER BY quartile
     """)
 
 
-def _by_actor_sync(start: str | None = None, end: str | None = None) -> list[dict]:
-    pred = _date_pred(start, end)
+def _by_actor_sync(start: str | None = None, end: str | None = None, vertical: str | None = None) -> list[dict]:
+    pred = _preds(start, end, vertical)
     return _run(f"""
         SELECT COALESCE(NULLIF(TRIM(cancelled_by_txt), ''), 'Unknown') AS cancelled_by,
           COUNT(*)                                  AS cancellations,
           ROUND(AVG(total_order_value), 2)          AS avg_order_value
-        FROM {_T()}
+        FROM {_T}
         WHERE {_CANCELLED}{pred}
         GROUP BY cancelled_by
         ORDER BY cancellations DESC
     """)
 
 
-def _crosstabs_sync(start: str | None = None, end: str | None = None) -> dict:
-    pred = _date_pred(start, end)
+def _by_reason_sync(start: str | None = None, end: str | None = None, vertical: str | None = None) -> list[dict]:
+    """Stated cancellation reasons (first segment of cancel_comment) with who
+    cancelled — the closest thing to ground-truth causes in the data."""
+    pred = _preds(start, end, vertical)
+    return _run(f"""
+        SELECT
+          COALESCE(NULLIF(TRIM(split_first(cancel_comment, '//')), ''), 'No reason given') AS reason,
+          COALESCE(NULLIF(TRIM(cancelled_by_txt), ''), 'Unknown')                          AS cancelled_by,
+          COUNT(*)                          AS cancellations,
+          ROUND(AVG(total_order_value), 2)  AS avg_order_value
+        FROM {_T}
+        WHERE {_CANCELLED}{pred}
+        GROUP BY reason, cancelled_by
+        ORDER BY cancellations DESC
+        LIMIT 20
+    """)
+
+
+def _crosstabs_sync(start: str | None = None, end: str | None = None, vertical: str | None = None) -> dict:
+    pred = _preds(start, end, vertical)
+    # Full zone × time-bucket grid for the riskiest zones (highest cancel rate
+    # with meaningful volume) — every bucket is returned for each zone so the
+    # heatmap has no holes, unlike a flat "top 20 worst cells" ranking.
     zone_time = _run(f"""
         WITH bucketed AS (
-          SELECT order_status, zone_name,
-            CASE
-              WHEN EXTRACT(HOUR FROM order_placement_time) BETWEEN 6  AND 10 THEN 'Morning'
-              WHEN EXTRACT(HOUR FROM order_placement_time) BETWEEN 11 AND 13 THEN 'Lunch'
-              WHEN EXTRACT(HOUR FROM order_placement_time) BETWEEN 14 AND 16 THEN 'Afternoon'
-              WHEN EXTRACT(HOUR FROM order_placement_time) BETWEEN 17 AND 20 THEN 'Dinner'
-              ELSE 'Late Night'
-            END AS time_bucket
-          FROM {_T()}
+          SELECT order_status, zone_name, {_TIME_BUCKET} AS time_bucket
+          FROM {_T}
           WHERE order_placement_time IS NOT NULL AND zone_name IS NOT NULL AND TRIM(zone_name) != ''{pred}
+        ),
+        agg AS (
+          SELECT zone_name, time_bucket,
+            COUNT(*)       AS total_orders,
+            {_N_CANCELLED} AS cancelled,
+            {_RATE_PCT}    AS cancel_rate_pct
+          FROM bucketed
+          GROUP BY zone_name, time_bucket
+        ),
+        top_zones AS (
+          SELECT zone_name, {safe_divide("SUM(cancelled)", "SUM(total_orders)")} AS zone_rate
+          FROM agg
+          GROUP BY zone_name
+          HAVING SUM(total_orders) >= 100
+          ORDER BY zone_rate DESC
+          LIMIT 6
         )
-        SELECT zone_name, time_bucket,
-          COUNT(*)                                                                  AS total_orders,
-          COUNTIF(LOWER(TRIM(order_status)) LIKE '%cancel%')                                       AS cancelled,
-          ROUND(SAFE_DIVIDE(COUNTIF(LOWER(TRIM(order_status)) LIKE '%cancel%'), COUNT(*)) * 100, 2)  AS cancel_rate_pct
-        FROM bucketed
-        GROUP BY zone_name, time_bucket
-        HAVING total_orders >= 20
-        ORDER BY cancel_rate_pct DESC LIMIT 20
+        SELECT a.zone_name, a.time_bucket, a.total_orders, a.cancelled, a.cancel_rate_pct
+        FROM agg a
+        JOIN top_zones t ON a.zone_name = t.zone_name
+        ORDER BY t.zone_rate DESC, a.time_bucket
     """)
+    # Top 5 vendors by cancelled volume for EACH weekday — feeds the
+    # "Cancellation Rate by Day" hover ("which vendors drive this day").
     merchant_dow = _run(f"""
-        SELECT restaurant_name, FORMAT_DATE('%A', order_placement_date) AS day_of_week,
-          COUNT(*)                                                                  AS total_orders,
-          COUNTIF(LOWER(TRIM(order_status)) LIKE '%cancel%')                                       AS cancelled,
-          ROUND(SAFE_DIVIDE(COUNTIF(LOWER(TRIM(order_status)) LIKE '%cancel%'), COUNT(*)) * 100, 2)  AS cancel_rate_pct
-        FROM {_T()}
-        WHERE order_placement_date IS NOT NULL AND restaurant_name IS NOT NULL AND TRIM(restaurant_name) != ''{pred}
-        GROUP BY restaurant_name, day_of_week
-        HAVING total_orders >= 20
-        ORDER BY cancel_rate_pct DESC LIMIT 20
+        WITH agg AS (
+          SELECT restaurant_name, day_name(order_placement_date) AS day_of_week,
+            COUNT(*)       AS total_orders,
+            {_N_CANCELLED} AS cancelled,
+            {_RATE_PCT}    AS cancel_rate_pct
+          FROM {_T}
+          WHERE order_placement_date IS NOT NULL AND restaurant_name IS NOT NULL AND TRIM(restaurant_name) != ''{pred}
+          GROUP BY restaurant_name, day_of_week
+          HAVING total_orders >= 20
+        ),
+        ranked AS (
+          SELECT *, ROW_NUMBER() OVER (PARTITION BY day_of_week ORDER BY cancelled DESC) AS rn FROM agg
+        )
+        SELECT restaurant_name, day_of_week, total_orders, cancelled, cancel_rate_pct
+        FROM ranked WHERE rn <= 5
+        ORDER BY day_of_week, cancelled DESC
     """)
-    return {"zone_x_time": zone_time, "merchant_x_dow": merchant_dow}
+    # Top 5 vendors by cancelled volume for EACH zone — feeds the
+    # "Cancellation Rate by Zone" hover ("which vendors drive this zone").
+    merchant_zone = _run(f"""
+        WITH agg AS (
+          SELECT restaurant_name, zone_name,
+            COUNT(*)       AS total_orders,
+            {_N_CANCELLED} AS cancelled,
+            {_RATE_PCT}    AS cancel_rate_pct
+          FROM {_T}
+          WHERE zone_name IS NOT NULL AND TRIM(zone_name) != ''
+            AND restaurant_name IS NOT NULL AND TRIM(restaurant_name) != ''{pred}
+          GROUP BY restaurant_name, zone_name
+          HAVING total_orders >= 20
+        ),
+        ranked AS (
+          SELECT *, ROW_NUMBER() OVER (PARTITION BY zone_name ORDER BY cancelled DESC) AS rn FROM agg
+        )
+        SELECT restaurant_name, zone_name, total_orders, cancelled, cancel_rate_pct
+        FROM ranked WHERE rn <= 5
+        ORDER BY zone_name, cancelled DESC
+    """)
+    return {"zone_x_time": zone_time, "merchant_x_dow": merchant_dow, "merchant_x_zone": merchant_zone}
+
+
+def _by_vertical_sync(start: str | None = None, end: str | None = None) -> list[dict]:
+    """Cancellation breakdown across the canonical verticals (renames merged,
+    NULL/junk platforms excluded), each carrying its top contributing merchants."""
+    pred = _preds(start, end)
+    verticals_rows = _run(f"""
+        SELECT {vertical_case('platform_name')} AS vertical,
+          COUNT(*)       AS total_orders,
+          {_N_CANCELLED} AS cancelled,
+          {_RATE_PCT}    AS cancel_rate_pct,
+          ROUND(AVG(total_order_value), 2) AS avg_order_value
+        FROM {_T}
+        WHERE order_placement_date IS NOT NULL
+          AND {vertical_case('platform_name')} IS NOT NULL{pred}
+        GROUP BY vertical
+        ORDER BY total_orders DESC
+    """)
+    # Top contributing merchants per vertical. Rules from ops:
+    #  1. Vendors averaging > 5 cancelled orders per active day qualify. But for a
+    #     low-volume vertical (Health & Wellness, Last Mile, …) where no vendor
+    #     clears that bar, the threshold drops to 0 so it still gets a breakdown
+    #     (any vendor with cancellations) instead of showing empty.
+    #  2. Show each vendor's contribution to the vertical's cancel RATE
+    #     (cancelled / vertical's total orders), so the merchants' percentages
+    #     break down the vertical's headline rate (they sum to it, e.g. 2.3%).
+    #     Top 5 per vertical; cancelled-volume order == contribution order.
+    per_day = safe_divide("cancelled", "NULLIF(active_days, 0)")
+    merchants = _run(f"""
+        WITH agg AS (
+          SELECT {vertical_case('platform_name')} AS vertical, restaurant_name,
+            {_N_CANCELLED} AS cancelled,
+            {_RATE_PCT}    AS cancel_rate_pct,
+            COUNT(DISTINCT order_placement_date) AS active_days
+          FROM {_T}
+          WHERE order_placement_date IS NOT NULL
+            AND restaurant_name IS NOT NULL AND TRIM(restaurant_name) != ''
+            AND {vertical_case('platform_name')} IS NOT NULL{pred}
+          GROUP BY vertical, restaurant_name
+        ),
+        flagged AS (
+          SELECT vertical, restaurant_name, cancelled, cancel_rate_pct,
+            {per_day} > 5 AS qualifies,
+            MAX(CASE WHEN {per_day} > 5 THEN 1 ELSE 0 END)
+              OVER (PARTITION BY vertical) AS vertical_has_qualifier
+          FROM agg
+        ),
+        ranked AS (
+          SELECT *, ROW_NUMBER() OVER (PARTITION BY vertical ORDER BY cancelled DESC) AS rn
+          FROM flagged
+          WHERE cancelled > 0 AND (qualifies OR vertical_has_qualifier = 0)
+        )
+        SELECT vertical, restaurant_name, cancelled, cancel_rate_pct
+        FROM ranked WHERE rn <= 5
+        ORDER BY vertical, cancelled DESC
+    """)
+    # Denominator = the vertical's own total orders, so each merchant's share is a
+    # slice of that vertical's cancel rate (all merchants' shares sum to it).
+    orders_by_vertical = {r["vertical"]: (r.get("total_orders") or 0) for r in verticals_rows}
+    by_vertical: dict[str, list[dict]] = {}
+    for m in merchants:
+        denom = orders_by_vertical.get(m["vertical"], 0)
+        by_vertical.setdefault(m["vertical"], []).append({
+            "restaurant_name": m["restaurant_name"],
+            "cancelled": m["cancelled"],
+            "cancel_rate_pct": m["cancel_rate_pct"],
+            "rate_contribution_pct": round(m["cancelled"] / denom * 100, 2) if denom else 0.0,
+        })
+    for row in verticals_rows:
+        row["top_merchants"] = by_vertical.get(row["vertical"], [])
+    return verticals_rows
 
 
 # ---------------------------------------------------------------------------
@@ -267,40 +424,48 @@ async def _run_async(fn, *args):
     return await loop.run_in_executor(None, fn, *args)
 
 
-def _key(base: str, start: str | None, end: str | None) -> str:
-    return f"{base}:{start or ''}:{end or ''}"
+def _key(base: str, start: str | None, end: str | None, vertical: str | None = None) -> str:
+    return f"{base}:{start or ''}:{end or ''}:{vertical or ''}"
 
 
-async def get_trend(start: str | None = None, end: str | None = None) -> dict:
-    return await _cached(_key("trend", start, end), lambda: _run_async(_trend_sync, start, end))
+async def get_trend(start: str | None = None, end: str | None = None, vertical: str | None = None) -> dict:
+    return await _cached(_key("trend", start, end, vertical), lambda: _run_async(_trend_sync, start, end, vertical))
 
 
-async def get_by_merchant(start: str | None = None, end: str | None = None) -> dict:
-    return await _cached(_key("by_merchant", start, end), lambda: _run_async(_by_merchant_sync, start, end))
+async def get_by_merchant(start: str | None = None, end: str | None = None, vertical: str | None = None) -> dict:
+    return await _cached(_key("by_merchant", start, end, vertical), lambda: _run_async(_by_merchant_sync, start, end, vertical))
 
 
-async def get_by_zone(start: str | None = None, end: str | None = None) -> dict:
-    return await _cached(_key("by_zone", start, end), lambda: _run_async(_by_zone_sync, start, end))
+async def get_by_zone(start: str | None = None, end: str | None = None, vertical: str | None = None) -> dict:
+    return await _cached(_key("by_zone", start, end, vertical), lambda: _run_async(_by_zone_sync, start, end, vertical))
 
 
-async def get_by_time(start: str | None = None, end: str | None = None) -> list[dict]:
-    return await _cached(_key("by_time", start, end), lambda: _run_async(_by_time_sync, start, end))
+async def get_by_time(start: str | None = None, end: str | None = None, vertical: str | None = None) -> list[dict]:
+    return await _cached(_key("by_time", start, end, vertical), lambda: _run_async(_by_time_sync, start, end, vertical))
 
 
-async def get_by_dow(start: str | None = None, end: str | None = None) -> list[dict]:
-    return await _cached(_key("by_dow", start, end), lambda: _run_async(_by_dow_sync, start, end))
+async def get_by_dow(start: str | None = None, end: str | None = None, vertical: str | None = None) -> list[dict]:
+    return await _cached(_key("by_dow", start, end, vertical), lambda: _run_async(_by_dow_sync, start, end, vertical))
 
 
-async def get_by_order_size(start: str | None = None, end: str | None = None) -> list[dict]:
-    return await _cached(_key("by_order_size", start, end), lambda: _run_async(_by_order_size_sync, start, end))
+async def get_by_order_size(start: str | None = None, end: str | None = None, vertical: str | None = None) -> list[dict]:
+    return await _cached(_key("by_order_size", start, end, vertical), lambda: _run_async(_by_order_size_sync, start, end, vertical))
 
 
-async def get_by_actor(start: str | None = None, end: str | None = None) -> list[dict]:
-    return await _cached(_key("by_actor", start, end), lambda: _run_async(_by_actor_sync, start, end))
+async def get_by_actor(start: str | None = None, end: str | None = None, vertical: str | None = None) -> list[dict]:
+    return await _cached(_key("by_actor", start, end, vertical), lambda: _run_async(_by_actor_sync, start, end, vertical))
 
 
-async def get_crosstabs(start: str | None = None, end: str | None = None) -> dict:
-    return await _cached(_key("crosstabs", start, end), lambda: _run_async(_crosstabs_sync, start, end))
+async def get_crosstabs(start: str | None = None, end: str | None = None, vertical: str | None = None) -> dict:
+    return await _cached(_key("crosstabs", start, end, vertical), lambda: _run_async(_crosstabs_sync, start, end, vertical))
+
+
+async def get_by_vertical(start: str | None = None, end: str | None = None) -> list[dict]:
+    return await _cached(_key("by_vertical", start, end), lambda: _run_async(_by_vertical_sync, start, end))
+
+
+async def get_by_reason(start: str | None = None, end: str | None = None, vertical: str | None = None) -> list[dict]:
+    return await _cached(_key("by_reason", start, end, vertical), lambda: _run_async(_by_reason_sync, start, end, vertical))
 
 
 # Mapping used by the exploration script to write artifact JSONs.
@@ -312,15 +477,16 @@ EXPLORATION_FUNCS: dict[str, callable] = {
     "cancellation_by_dow": _by_dow_sync,
     "cancellation_by_order_size": _by_order_size_sync,
     "cancellation_by_actor": _by_actor_sync,
+    "cancellation_by_reason": _by_reason_sync,
     "cancellation_crosstabs": _crosstabs_sync,
 }
 
 
 async def get_exploration_context() -> dict:
     """All exploration summaries in parallel — context for Gemini report/chat."""
-    keys = ["trend", "by_merchant", "by_zone", "by_time", "by_dow", "by_order_size", "by_actor", "crosstabs"]
+    keys = ["trend", "by_merchant", "by_zone", "by_time", "by_dow", "by_order_size", "by_actor", "crosstabs", "by_vertical", "by_reason"]
     funcs = [get_trend(), get_by_merchant(), get_by_zone(), get_by_time(),
-             get_by_dow(), get_by_order_size(), get_by_actor(), get_crosstabs()]
+             get_by_dow(), get_by_order_size(), get_by_actor(), get_crosstabs(), get_by_vertical(), get_by_reason()]
     results = await asyncio.gather(*funcs, return_exceptions=True)
     out: dict = {}
     for k, r in zip(keys, results):
@@ -357,7 +523,7 @@ def load_threshold_analysis() -> dict | None:
 # ---------------------------------------------------------------------------
 
 _REPORT_PROMPT = """\
-You are a senior operations analyst for Rafeeq, a food-delivery platform in Qatar.
+You are a senior operations analyst for Clarity, a food-delivery platform in Qatar.
 Below is aggregated cancellation data and (optionally) ML feature-importance.
 Produce a Cancellation Drivers Report as STRICT JSON — no markdown, no prose outside JSON.
 
@@ -378,6 +544,15 @@ Return EXACTLY this JSON shape:
 }}
 
 Rules:
+- A driver is a ROOT CAUSE or operational mechanism that makes customers or
+  vendors cancel (e.g. "items out of stock at pickup", "no couriers available
+  late at night", "orders placed by mistake"). It must answer "WHY do orders
+  get cancelled?".
+- A driver is NEVER a segment comparison or observation ("vertical X cancels
+  more than vertical Y", "zone Z has a high rate") — those belong in
+  high_risk_segments. Ground drivers primarily in the by_reason data (stated
+  cancellation reasons and who cancelled); use segment data only as supporting
+  evidence for WHERE a cause concentrates.
 - top_drivers: up to 10, ranked most-to-least important.
 - high_risk_segments: up to 5.
 - Base every statement strictly on the provided data. Do not invent numbers.
@@ -396,7 +571,9 @@ async def generate_drivers_report() -> dict:
         generated_at=generated_at,
     )
 
-    raw = await call_with_retry(prompt)
+    # Reasoning-heavy narrative over the whole exploration payload; runs once per
+    # cache refresh, so medium thinking costs pennies here (unlike classification).
+    raw = await call_with_retry(prompt, thinking_level="medium")
     try:
         report = extract_json(raw)
     except json.JSONDecodeError as exc:

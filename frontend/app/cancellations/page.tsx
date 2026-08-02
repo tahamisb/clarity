@@ -1,15 +1,15 @@
 "use client"
 
 import React, { useState, useMemo, useEffect, useCallback, useRef } from "react"
-import { Ban, TrendingDown, TrendingUp, AlertTriangle, Target, Loader2, RefreshCw } from "lucide-react"
-import { Sidebar } from "@/components/rafeeq/sidebar"
-import { Topbar } from "@/components/rafeeq/topbar"
-import { StatCard } from "@/components/rafeeq/stat-card"
-import { CancellationLoading } from "@/components/rafeeq/loading-screen"
-import { CancellationChat } from "@/components/rafeeq/cancellation-chat"
-import { RefreshStatus } from "@/components/rafeeq/refresh-status"
-import { GlobalTimeRange } from "@/components/rafeeq/time-range-select"
-import { ThresholdAlert } from "@/components/rafeeq/threshold-alert"
+import { Ban, TrendingDown, TrendingUp, AlertTriangle, Target, Loader2, RefreshCw, ChevronLeft, ChevronRight } from "lucide-react"
+import { Sidebar } from "@/components/clarity/sidebar"
+import { Topbar, type SearchResult } from "@/components/clarity/topbar"
+import { useDebouncedValue } from "@/lib/use-debounced-value"
+import { StatCard } from "@/components/clarity/stat-card"
+import { CancellationLoading } from "@/components/clarity/loading-screen"
+import { RefreshStatus } from "@/components/clarity/refresh-status"
+import { GlobalTimeRange } from "@/components/clarity/time-range-select"
+import { ThresholdAlert } from "@/components/clarity/threshold-alert"
 import { useAutoRefresh, useSettings } from "@/lib/settings-context"
 import { useTimeFilter } from "@/lib/time-filter-context"
 import { type TimeRange } from "@/lib/time-range"
@@ -20,18 +20,20 @@ import {
 } from "recharts"
 import {
   fetchAllCancellationData,
-  fetchLiveQueue,
   fetchDriversReport,
   explainOrder,
   clearServerCache,
   type CancelTrend, type CancelByMerchant, type CancelByZone, type TimeCancelRow,
   type DowCancelRow, type ActorRow, type CancelCrosstabs, type DriversReport,
-  type FeatureImportance, type ModelInfo, type LiveQueue, type CancelPrediction,
-  type PredictionEngine,
+  type LiveQueue, type CancelPrediction,
+  type VerticalCancelRow,
 } from "@/lib/api"
+import { GlobalVerticalSelect, VerticalBadge } from "@/components/clarity/vertical-select"
+import { HoverBreakdown } from "@/components/clarity/hover-breakdown"
 import { cn } from "@/lib/utils"
 
 const TIME_BUCKETS = ["Morning", "Lunch", "Afternoon", "Dinner", "Late Night"]
+const QUEUE_PAGE_SIZE = 15
 
 function riskPill(level: string) {
   if (level === "high") return "bg-destructive/10 text-destructive border-destructive/20"
@@ -47,7 +49,7 @@ export default function CancellationsPage() {
   const [refreshing, setRefreshing] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const { settings } = useSettings()
-  const { range, queryKey } = useTimeFilter()
+  const { range, vertical, queryKey } = useTimeFilter()
 
   const [trend, setTrend] = useState<CancelTrend | null>(null)
   const [byMerchant, setByMerchant] = useState<CancelByMerchant | null>(null)
@@ -55,11 +57,10 @@ export default function CancellationsPage() {
   const [byTime, setByTime] = useState<TimeCancelRow[] | null>(null)
   const [byDay, setByDay] = useState<DowCancelRow[] | null>(null)
   const [byActor, setByActor] = useState<ActorRow[] | null>(null)
+  const [byVertical, setByVertical] = useState<VerticalCancelRow[] | null>(null)
   const [crosstabs, setCrosstabs] = useState<CancelCrosstabs | null>(null)
   const [driversReport, setDriversReport] = useState<DriversReport | null>(null)
   const [reportLoading, setReportLoading] = useState(true)
-  const [featureImportance, setFeatureImportance] = useState<FeatureImportance | null>(null)
-  const [modelInfo, setModelInfo] = useState<ModelInfo | null>(null)
   const [liveQueue, setLiveQueue] = useState<LiveQueue | null>(null)
 
   const [riskFilter, setRiskFilter] = useState("All Risks")
@@ -67,18 +68,22 @@ export default function CancellationsPage() {
   const [expanded, setExpanded] = useState<string | null>(null)
   const [explanations, setExplanations] = useState<Record<string, CancelPrediction>>({})
   const [explaining, setExplaining] = useState<string | null>(null)
-  const [engine, setEngine] = useState<PredictionEngine>("auto")
-  const [queueLoading, setQueueLoading] = useState(false)
+  const [queuePage, setQueuePage] = useState(0)
+  // Deep-link target (/cancellations?order=ID or a search-result click): the order
+  // to page to, scroll to, and briefly highlight in the live queue.
+  const [highlightOrder, setHighlightOrder] = useState<string | null>(null)
+  const queueRowRefs = useRef<Record<string, HTMLTableRowElement | null>>({})
 
   // Load dashboard data. `background` skips the full-page skeleton (auto-refresh
   // and manual refresh) and intentionally does NOT regenerate the Gemini drivers
   // report, which is a slow/billed call we don't want to re-run every tick.
-  const loadData = useCallback((r: TimeRange, background = false) => {
+  const loadData = useCallback((r: TimeRange, background = false, bust = false) => {
     if (background) setRefreshing(true)
     else setLoading(true)
-    // A refresh re-reads from BigQuery; bust the server cache first so it does.
-    const ready = background ? clearServerCache() : Promise.resolve()
-    ready.then(() => fetchAllCancellationData(r)).then((d) => {
+    // Only the manual Refresh button busts the server cache — auto-refresh and
+    // window toggles ride the backend's TTL cache so they stay fast.
+    const ready = bust ? clearServerCache() : Promise.resolve()
+    ready.then(() => fetchAllCancellationData(r, vertical)).then((d) => {
       setTrend(d.trend)
       setByMerchant(d.byMerchant)
       setByZone(d.byZone)
@@ -86,11 +91,8 @@ export default function CancellationsPage() {
       setByDay(d.byDay)
       setByActor(d.byActor)
       setCrosstabs(d.crosstabs)
-      setFeatureImportance(d.featureImportance)
-      setModelInfo(d.modelInfo)
-      // Respect the currently-selected prediction engine for the live queue.
-      if (engine === "auto") setLiveQueue(d.liveQueue)
-      else fetchLiveQueue(50, engine).then(setLiveQueue)
+      setByVertical(d.byVertical)
+      setLiveQueue(d.liveQueue)
       setLastUpdated(new Date())
       if (background) setRefreshing(false)
       else setLoading(false)
@@ -103,7 +105,7 @@ export default function CancellationsPage() {
         setReportLoading(false)
       })
     }
-  }, [engine])
+  }, [vertical])
 
   useEffect(() => {
     loadData(range, false)
@@ -120,6 +122,41 @@ export default function CancellationsPage() {
 
   // Re-fetch on the cadence configured on the Settings page.
   useAutoRefresh(() => loadData(range, true))
+
+  // Vertical the stat cards describe. When a filter is active the numbers are
+  // scoped to it; unfiltered ("all") they're blended across every vertical, so
+  // the badge must say "All verticals" — NOT the highest-volume one (that made
+  // the cards claim "Restaurants" while showing the platform-wide rate).
+  const statVertical = vertical
+
+  // Hover breakdowns — top contributors behind the cancellation stats, built
+  // from data the page already fetched (no extra queries).
+  const merchantContributors = useMemo(
+    () => (byMerchant?.by_volume ?? []).slice(0, 5).map((m) => ({
+      label: m.restaurant_name, value: m.cancelled, pct: m.cancel_rate_pct,
+    })),
+    [byMerchant],
+  )
+  const zoneContributors = useMemo(
+    () => [...(byZone?.by_zone_name ?? [])]
+      .sort((a, b) => b.cancelled - a.cancelled)
+      .slice(0, 5)
+      .map((z) => ({ label: z.zone, value: z.cancelled, pct: z.cancel_rate_pct })),
+    [byZone],
+  )
+  const verticalContributors = useMemo(
+    () => (byVertical ?? []).map((v) => ({
+      label: v.vertical, value: v.cancelled, pct: v.cancel_rate_pct,
+    })),
+    [byVertical],
+  )
+  // Per-vertical top merchants come embedded on each vertical row: vendors with
+  // >5 cancels/active day, showing their contribution to the vertical cancel rate.
+  const merchantsInVertical = useCallback(
+    (row: VerticalCancelRow) => (row.top_merchants ?? [])
+      .map((m) => ({ label: m.restaurant_name, value: m.cancelled, pct: m.rate_contribution_pct })),
+    [],
+  )
 
   // Cancellation-rate alert: zones (with meaningful volume) whose cancel rate
   // exceeds the configured threshold (Settings → SLA & Alert Configurations).
@@ -147,9 +184,10 @@ export default function CancellationsPage() {
       wow = weekly[weekly.length - 1].cancel_rate_pct - weekly[weekly.length - 2].cancel_rate_pct
     }
 
+    // Top driver comes from the Gemini drivers report (never the ML artifacts);
+    // fall back to the top cancelling actor while the report is generating.
     const topDriver =
       driversReport?.top_drivers?.[0]?.name ??
-      featureImportance?.top_features?.[0]?.feature ??
       byActor?.[0]?.cancelled_by ??
       "—"
 
@@ -158,7 +196,7 @@ export default function CancellationsPage() {
       .sort((a, b) => b.cancel_rate_pct - a.cancel_rate_pct)[0]?.zone ?? "—"
 
     return { totalCancelled, overallRate, wow, topDriver, riskZone }
-  }, [trend, driversReport, featureImportance, byActor, byZone])
+  }, [trend, driversReport, byActor, byZone])
 
   // Trend chart data (weekly cancellation rate). The backend already scopes the
   // trend to the selected window, so we map the weekly series straight through.
@@ -167,16 +205,46 @@ export default function CancellationsPage() {
     [trend],
   )
 
-  // Top drivers (prefer ML feature importance, fall back to cancellation actors)
+  // Top drivers — Gemini drivers report; cancellation actors while it loads.
+  // `explanation` feeds the hover tooltip (the cause behind the bar).
   const driverData = useMemo(() => {
-    if (featureImportance?.top_features?.length) {
-      return featureImportance.top_features.slice(0, 8).map((f) => ({
-        driver: f.feature.replace(/^num__|^cat__/, "").replace(/_/g, " "),
-        value: Math.round(f.importance * 1000) / 1000,
+    if (driversReport?.top_drivers?.length) {
+      return driversReport.top_drivers.slice(0, 8).map((d) => ({
+        driver: d.name,
+        value: Math.round(d.importance * 1000) / 1000,
+        explanation: d.explanation,
       }))
     }
-    return (byActor ?? []).slice(0, 8).map((a) => ({ driver: a.cancelled_by, value: a.cancellations }))
-  }, [featureImportance, byActor])
+    return (byActor ?? []).slice(0, 8).map((a) => ({
+      driver: a.cancelled_by, value: a.cancellations, explanation: undefined as string | undefined,
+    }))
+  }, [driversReport, byActor])
+
+  // Top cancelling vendors per weekday (crosstabs.merchant_x_dow returns the
+  // 5 worst per day) — feeds the "Rate by Day" hover.
+  const merchantsByDay = useMemo(() => {
+    const map = new Map<string, { name: string; cancelled: number; rate: number }[]>()
+    for (const r of crosstabs?.merchant_x_dow ?? []) {
+      if (!r.day_of_week || !r.restaurant_name) continue
+      const list = map.get(r.day_of_week) ?? []
+      list.push({ name: r.restaurant_name, cancelled: r.cancelled, rate: r.cancel_rate_pct })
+      map.set(r.day_of_week, list)
+    }
+    return map
+  }, [crosstabs])
+
+  // Top cancelling vendors per zone (crosstabs.merchant_x_zone) — feeds the
+  // "Rate by Zone" hover.
+  const merchantsByZone = useMemo(() => {
+    const map = new Map<string, { name: string; cancelled: number; rate: number }[]>()
+    for (const r of crosstabs?.merchant_x_zone ?? []) {
+      if (!r.zone_name || !r.restaurant_name) continue
+      const list = map.get(r.zone_name) ?? []
+      list.push({ name: r.restaurant_name, cancelled: r.cancelled, rate: r.cancel_rate_pct })
+      map.set(r.zone_name, list)
+    }
+    return map
+  }, [crosstabs])
 
   // Zone × time heatmap
   const heatmap = useMemo(() => {
@@ -199,7 +267,7 @@ export default function CancellationsPage() {
   const dayData = useMemo(
     () => [...(byDay ?? [])]
       .sort((a, b) => a.dow_index - b.dow_index)
-      .map((d) => ({ day: d.day_of_week.slice(0, 3), rate: d.cancel_rate_pct })),
+      .map((d) => ({ day: d.day_of_week.slice(0, 3), fullDay: d.day_of_week, rate: d.cancel_rate_pct })),
     [byDay],
   )
 
@@ -219,29 +287,154 @@ export default function CancellationsPage() {
     [liveQueue],
   )
 
+  // Live queue pagination — 15 rows/page with a scrollable body.
+  const queueTotalPages = Math.max(1, Math.ceil(queueOrders.length / QUEUE_PAGE_SIZE))
+  const queueSafePage = Math.min(queuePage, queueTotalPages - 1)
+  const queuePageStart = queueSafePage * QUEUE_PAGE_SIZE
+  const pagedQueueOrders = queueOrders.slice(queuePageStart, queuePageStart + QUEUE_PAGE_SIZE)
+
+  // Back to page 1 whenever the filtered set changes.
+  useEffect(() => { setQueuePage(0) }, [queueOrders.length])
+
+  // Deep-link: read ?order= on mount so a notification / cross-page link lands here.
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("order")
+    if (id) setHighlightOrder(id)
+  }, [])
+
+  // Once the queue has loaded, clear the risk/zone filters that could hide the
+  // highlighted order so it's actually reachable.
+  useEffect(() => {
+    if (!highlightOrder || !liveQueue?.orders?.length) return
+    if (!liveQueue.orders.some((o) => o.order_id === highlightOrder)) return
+    setRiskFilter("All Risks")
+    setZoneFilter("All Zones")
+  }, [highlightOrder, liveQueue])
+
+  // Page to the highlighted order (must run after the reset-to-page-1 effect above).
+  useEffect(() => {
+    if (!highlightOrder) return
+    const idx = queueOrders.findIndex((o) => o.order_id === highlightOrder)
+    if (idx >= 0) setQueuePage(Math.floor(idx / QUEUE_PAGE_SIZE))
+  }, [highlightOrder, queueOrders])
+
+  // Scroll the row into view and hold the highlight for a few seconds.
+  useEffect(() => {
+    if (!highlightOrder) return
+    const el = queueRowRefs.current[highlightOrder]
+    if (!el) return
+    el.scrollIntoView({ behavior: "smooth", block: "center" })
+    const timer = setTimeout(() => setHighlightOrder(null), 3500)
+    return () => clearTimeout(timer)
+  }, [highlightOrder, pagedQueueOrders])
+
+  // Topbar search dropdown — clicking a hit highlights + scrolls to it in-place.
+  const { value: debouncedSearch, pending: searchPending } = useDebouncedValue(search)
+  const searchResults = useMemo<SearchResult[]>(() => {
+    const q = debouncedSearch.trim().toLowerCase()
+    if (!q) return []
+    return (liveQueue?.orders ?? [])
+      .filter((o) =>
+        (o.order_id ?? "").toLowerCase().includes(q) ||
+        (o.restaurant_name ?? "").toLowerCase().includes(q) ||
+        (o.zone_name ?? "").toLowerCase().includes(q),
+      )
+      .slice(0, 50)
+      .map((o) => ({
+        id: o.order_id ?? "—",
+        title: `${t("col.orderId")} ${o.order_id ?? "—"} · ${Math.round(o.probability * 100)}%`,
+        subtitle: [o.restaurant_name, o.zone_name].filter(Boolean).join(" · ") || undefined,
+        badge: tv(o.risk_level),
+        onSelect: () => { if (o.order_id) setHighlightOrder(o.order_id) },
+      }))
+  }, [debouncedSearch, liveQueue, t, tv])
+
   const toggleExpand = useCallback(async (orderId: string | null) => {
     if (!orderId) return
     if (expanded === orderId) { setExpanded(null); return }
     setExpanded(orderId)
     if (!explanations[orderId]) {
       setExplaining(orderId)
-      const detail = await explainOrder(orderId, engine)
+      const detail = await explainOrder(orderId)
       if (detail) setExplanations((prev) => ({ ...prev, [orderId]: detail }))
       setExplaining(null)
     }
-  }, [expanded, explanations, engine])
+  }, [expanded, explanations])
 
-  // Re-score the live queue when the prediction engine changes
-  const changeEngine = useCallback((next: PredictionEngine) => {
-    setEngine(next)
-    setExpanded(null)
-    setExplanations({})
-    setQueueLoading(true)
-    fetchLiveQueue(50, next).then((q) => {
-      setLiveQueue(q)
-      setQueueLoading(false)
-    })
-  }, [])
+  // Drivers chart hover — shows the cause behind the bar, not just the score.
+  const DriverTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload?.length) return null
+    const explanation = payload[0]?.payload?.explanation as string | undefined
+    return (
+      <div className="max-w-xs rounded-lg border border-border bg-card/95 p-3 text-sm shadow-xl backdrop-blur-sm">
+        <p className="font-semibold text-foreground">{label}</p>
+        {explanation && <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{explanation}</p>}
+      </div>
+    )
+  }
+
+  // Rate-by-day hover — the day's rate plus its top cancelling vendors.
+  const DayTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload?.length) return null
+    const fullDay = payload[0]?.payload?.fullDay as string | undefined
+    const vendors = (fullDay && merchantsByDay.get(fullDay)) || []
+    return (
+      <div className="w-64 rounded-lg border border-border bg-card/95 p-3 text-sm shadow-xl backdrop-blur-sm">
+        <div className="flex items-center justify-between gap-4">
+          <span className="font-semibold text-foreground">{tv(label)}</span>
+          <span className="font-medium text-foreground">{payload[0].value}%</span>
+        </div>
+        {vendors.length > 0 && (
+          <>
+            <p className="mb-1 mt-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              {t("hover.topMerchants")}
+            </p>
+            <ul className="space-y-0.5">
+              {vendors.map((v) => (
+                <li key={v.name} className="flex items-center justify-between gap-2 text-xs">
+                  <span className="truncate text-foreground">{v.name}</span>
+                  <span className="shrink-0 tabular-nums text-muted-foreground">
+                    {v.cancelled.toLocaleString()} · {v.rate.toFixed(1)}%
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </div>
+    )
+  }
+
+  // Rate-by-zone hover — the zone's rate plus its top cancelling vendors.
+  const ZoneTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload?.length) return null
+    const vendors = merchantsByZone.get(label) || []
+    return (
+      <div className="w-64 rounded-lg border border-border bg-card/95 p-3 text-sm shadow-xl backdrop-blur-sm">
+        <div className="flex items-center justify-between gap-4">
+          <span className="font-semibold text-foreground">{tv(label)}</span>
+          <span className="font-medium text-foreground">{payload[0].value}%</span>
+        </div>
+        {vendors.length > 0 && (
+          <>
+            <p className="mb-1 mt-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              {t("hover.topMerchants")}
+            </p>
+            <ul className="space-y-0.5">
+              {vendors.map((v) => (
+                <li key={v.name} className="flex items-center justify-between gap-2 text-xs">
+                  <span className="truncate text-foreground">{v.name}</span>
+                  <span className="shrink-0 tabular-nums text-muted-foreground">
+                    {v.cancelled.toLocaleString()} · {v.rate.toFixed(1)}%
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </div>
+    )
+  }
 
   const CustomTooltip = ({ active, payload, label, unit = "%" }: any) => {
     if (active && payload?.length) {
@@ -260,7 +453,6 @@ export default function CancellationsPage() {
     return null
   }
 
-  const modelReady = modelInfo?.available
   const queueEmpty = !liveQueue || liveQueue.count === 0
 
   return (
@@ -268,9 +460,16 @@ export default function CancellationsPage() {
       <Sidebar />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar title={t("cancel.title")} search={search} onSearch={setSearch} />
+        <Topbar
+          title={t("cancel.title")}
+          search={search}
+          onSearch={setSearch}
+          searchResults={searchResults}
+          searchLoading={searchPending}
+          searchPlaceholder={t("top.searchOrders")}
+        />
 
-        <main className="flex flex-1 flex-col gap-6 p-4 md:p-6">
+        <main className="flex flex-1 flex-col gap-6 overflow-x-clip p-4 md:p-6">
 
           <div className="flex flex-col items-start gap-3 border-b border-border pb-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -283,7 +482,9 @@ export default function CancellationsPage() {
             </div>
             <div className="flex flex-col items-start gap-3 sm:items-end">
               <GlobalTimeRange className="lg:hidden" />
-              <RefreshStatus lastUpdated={lastUpdated} refreshing={refreshing} onRefresh={() => loadData(range, true)} />
+              {/* Mobile-only: topbar shows the vertical filter on lg+ (avoids a duplicate). */}
+              <GlobalVerticalSelect className="lg:hidden" />
+              <RefreshStatus lastUpdated={lastUpdated} refreshing={refreshing} onRefresh={() => loadData(range, true, true)} />
             </div>
           </div>
 
@@ -293,23 +494,62 @@ export default function CancellationsPage() {
           <>
           <ThresholdAlert title={t("cancel.alertBreach")} items={cancelBreach} />
 
-          {/* Stat Cards */}
+          {/* Stat Cards — badge names the vertical the numbers came from:
+              the selected filter, or the highest-volume vertical when on "all". */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
-            <StatCard label={t("cancel.statTotal")} value={stats.totalCancelled.toLocaleString()} trend="neutral" icon={Ban} />
-            <StatCard label={t("cx.cancellationRate")} value={`${stats.overallRate.toFixed(1)}%`} trend="neutral" icon={Target} />
-            <StatCard
-              label={t("cancel.statWow")}
-              value={stats.wow === null ? tv("N/A") : `${stats.wow >= 0 ? "+" : ""}${stats.wow.toFixed(1)} ${t("set.ptsSuffix")}`}
-              trend={stats.wow === null ? "neutral" : stats.wow > 0 ? "up" : "down"}
-              icon={stats.wow !== null && stats.wow > 0 ? TrendingUp : TrendingDown}
-            />
-            <StatCard label={t("cancel.statTopDriver")} value={tv(stats.topDriver)} trend="neutral" icon={AlertTriangle} />
-            <StatCard label={t("cancel.statRiskZone")} value={tv(stats.riskZone)} trend="neutral" icon={AlertTriangle} />
+            <HoverBreakdown title={t("hover.topMerchants")} rows={merchantContributors}>
+              <StatCard label={t("cancel.statTotal")} value={stats.totalCancelled.toLocaleString()} trend="neutral" icon={Ban}
+                badge={<VerticalBadge vertical={statVertical} />} />
+            </HoverBreakdown>
+            <HoverBreakdown title={t("hover.topVerticals")} rows={verticalContributors}>
+              <StatCard label={t("cx.cancellationRate")} value={`${stats.overallRate.toFixed(1)}%`} trend="neutral" icon={Target}
+                badge={<VerticalBadge vertical={statVertical} />} />
+            </HoverBreakdown>
+            <HoverBreakdown title={t("hover.topMerchants")} rows={merchantContributors}>
+              <StatCard
+                label={t("cancel.statWow")}
+                value={stats.wow === null ? tv("N/A") : `${stats.wow >= 0 ? "+" : ""}${stats.wow.toFixed(1)} ${t("set.ptsSuffix")}`}
+                trend={stats.wow === null ? "neutral" : stats.wow > 0 ? "up" : "down"}
+                icon={stats.wow !== null && stats.wow > 0 ? TrendingUp : TrendingDown}
+                badge={<VerticalBadge vertical={statVertical} />}
+              />
+            </HoverBreakdown>
+            <StatCard label={t("cancel.statTopDriver")} value={tv(stats.topDriver)} trend="neutral" icon={AlertTriangle}
+              badge={<VerticalBadge vertical={statVertical} />} />
+            <HoverBreakdown title={t("hover.topZones")} rows={zoneContributors}>
+              <StatCard label={t("cancel.statRiskZone")} value={tv(stats.riskZone)} trend="neutral" icon={AlertTriangle}
+                badge={<VerticalBadge vertical={statVertical} />} />
+            </HoverBreakdown>
           </div>
+
+          {/* Cancellation breakdown across verticals (always unfiltered — it IS the vertical view) */}
+          {byVertical && byVertical.length > 0 && (
+            <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
+              <h3 className="mb-4 text-sm font-semibold text-foreground">{t("cancel.byVertical")}</h3>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                {byVertical.map((row) => (
+                  <HoverBreakdown key={row.vertical} title={t("hover.topMerchants")} rows={merchantsInVertical(row)}>
+                    <div className="flex flex-col gap-1 rounded-lg bg-secondary/40 p-3">
+                      <VerticalBadge vertical={row.vertical} className="self-start" />
+                      <p className="mt-1 text-xl font-bold tabular-nums text-foreground">
+                        {row.cancel_rate_pct.toFixed(1)}%
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {t("cancel.byVerticalDetail", {
+                          cancelled: row.cancelled.toLocaleString(),
+                          total: row.total_orders.toLocaleString(),
+                        })}
+                      </p>
+                    </div>
+                  </HoverBreakdown>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Trend + Top Drivers */}
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-[2fr_1.5fr]">
-            <div className="flex flex-col rounded-xl border border-border bg-card p-5 shadow-sm">
+            <div className="flex min-w-0 flex-col rounded-xl border border-border bg-card p-5 shadow-sm">
               <h2 className="mb-4 text-base font-semibold text-foreground">{t("cancel.rateByWeek")}</h2>
               <div className="h-[300px] w-full">
                 {trendData.length === 0 ? (
@@ -329,9 +569,9 @@ export default function CancellationsPage() {
               </div>
             </div>
 
-            <div className="flex flex-col rounded-xl border border-border bg-card p-5 shadow-sm">
+            <div className="flex min-w-0 flex-col rounded-xl border border-border bg-card p-5 shadow-sm">
               <h2 className="mb-4 text-base font-semibold text-foreground">
-                {featureImportance?.top_features?.length ? t("cancel.topDriversModel") : t("cancel.byActor")}
+                {driversReport?.top_drivers?.length ? t("cancel.topDrivers") : t("cancel.byActor")}
               </h2>
               <div className="h-[240px] w-full">
                 {driverData.length === 0 ? (
@@ -342,7 +582,7 @@ export default function CancellationsPage() {
                       <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--border)" />
                       <XAxis type="number" hide />
                       <YAxis dataKey="driver" type="category" stroke="var(--muted-foreground)" fontSize={11} tickLine={false} axisLine={false} width={130} />
-                      <RechartsTooltip cursor={{ fill: "var(--muted)", opacity: 0.5 }} content={<CustomTooltip unit="" />} />
+                      <RechartsTooltip cursor={{ fill: "var(--muted)", opacity: 0.5 }} content={<DriverTooltip />} />
                       <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={16}>
                         {driverData.map((_, i) => (
                           <Cell key={i} fill="var(--primary)" style={{ opacity: 1 - i * 0.08 }} />
@@ -357,7 +597,7 @@ export default function CancellationsPage() {
 
           {/* Heatmap + Zone + Day */}
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-            <div className="flex flex-col rounded-xl border border-border bg-card p-5 shadow-sm">
+            <div className="flex min-w-0 flex-col rounded-xl border border-border bg-card p-5 shadow-sm">
               <h2 className="mb-4 text-base font-semibold text-foreground">{t("cancel.riskByZoneTime")}</h2>
               {heatmap.zones.length === 0 ? (
                 <EmptyChart label={t("cancel.noCrosstab")} />
@@ -392,7 +632,7 @@ export default function CancellationsPage() {
               )}
             </div>
 
-            <div className="flex flex-col rounded-xl border border-border bg-card p-5 shadow-sm">
+            <div className="flex min-w-0 flex-col rounded-xl border border-border bg-card p-5 shadow-sm">
               <h2 className="mb-4 text-base font-semibold text-foreground">{t("cancel.rateByZone")}</h2>
               <div className="min-h-[250px] w-full flex-1">
                 {zoneData.length === 0 ? <EmptyChart label={t("cancel.noZone")} /> : (
@@ -401,7 +641,7 @@ export default function CancellationsPage() {
                       <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--border)" />
                       <XAxis type="number" hide />
                       <YAxis dataKey="zone" type="category" stroke="var(--muted-foreground)" fontSize={11} tickLine={false} axisLine={false} width={90} tickFormatter={tv} />
-                      <RechartsTooltip cursor={{ fill: "var(--muted)", opacity: 0.5 }} content={<CustomTooltip />} />
+                      <RechartsTooltip cursor={{ fill: "var(--muted)", opacity: 0.5 }} content={<ZoneTooltip />} />
                       <Bar dataKey="rate" radius={[0, 4, 4, 0]} barSize={16}>
                         {zoneData.map((_, i) => (
                           <Cell key={i} fill={i === 0 ? "var(--destructive)" : "var(--primary)"} />
@@ -413,7 +653,7 @@ export default function CancellationsPage() {
               </div>
             </div>
 
-            <div className="flex flex-col rounded-xl border border-border bg-card p-5 shadow-sm">
+            <div className="flex min-w-0 flex-col rounded-xl border border-border bg-card p-5 shadow-sm">
               <h2 className="mb-4 text-base font-semibold text-foreground">{t("cancel.rateByDay")}</h2>
               <div className="min-h-[250px] w-full flex-1">
                 {dayData.length === 0 ? <EmptyChart label={t("cancel.noDow")} /> : (
@@ -422,7 +662,7 @@ export default function CancellationsPage() {
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
                       <XAxis dataKey="day" stroke="var(--muted-foreground)" fontSize={12} tickLine={false} axisLine={false} tickFormatter={tv} />
                       <YAxis stroke="var(--muted-foreground)" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(v) => `${v}%`} />
-                      <RechartsTooltip cursor={{ fill: "var(--muted)", opacity: 0.5 }} content={<CustomTooltip />} />
+                      <RechartsTooltip cursor={{ fill: "var(--muted)", opacity: 0.5 }} content={<DayTooltip />} />
                       <Bar dataKey="rate" radius={[4, 4, 0, 0]} barSize={24}>
                         {dayData.map((d, i) => (
                           <Cell key={i} fill={d.day === "Fri" ? "var(--destructive)" : "var(--primary)"} />
@@ -441,25 +681,10 @@ export default function CancellationsPage() {
               <div>
                 <h2 className="text-base font-semibold text-foreground">{t("cancel.liveQueue")}</h2>
                 <p className="text-sm text-muted-foreground">
-                  {t("cancel.liveQueueDesc", { engine: liveQueue?.engine === "gemini" ? "Gemini" : t("engine.mlModel") })}
+                  {t("cancel.liveQueueDesc", { engine: "Gemini" })}
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                {/* Prediction engine toggle */}
-                <div className="flex items-center rounded-lg border border-border bg-background p-0.5 text-xs">
-                  {(["auto", "model", "gemini"] as PredictionEngine[]).map((e) => (
-                    <button
-                      key={e}
-                      onClick={() => changeEngine(e)}
-                      className={cn(
-                        "rounded-md px-2.5 py-1 font-medium capitalize transition-colors",
-                        engine === e ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
-                      )}
-                    >
-                      {tv(e)}
-                    </button>
-                  ))}
-                </div>
                 <select className="rounded-lg border border-border bg-background px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary/50"
                   value={zoneFilter} onChange={(e) => setZoneFilter(e.target.value)}>
                   <option value="All Zones">{tv("All Zones")}</option>
@@ -472,27 +697,16 @@ export default function CancellationsPage() {
               </div>
             </div>
 
-            {queueLoading ? (
-              <div className="flex items-center justify-center gap-2 p-10 text-sm text-muted-foreground">
-                <Loader2 className="size-5 animate-spin text-accent" />
-                {t("cancel.scoringWith", { engine: engine === "gemini" ? "Gemini" : t("engine.mlModel") })}
-              </div>
-            ) : queueEmpty ? (
+            {queueEmpty ? (
               <div className="flex flex-col items-center gap-2 p-10 text-center text-sm text-muted-foreground">
                 <AlertTriangle className="size-6 text-muted-foreground" />
-                <p>
-                  {engine !== "gemini" && !modelReady
-                    ? t("cancel.modelNotTrained")
-                    : t("cancel.noActiveOrders")}
-                </p>
-                {engine !== "gemini" && !modelReady && (
-                  <code className="rounded bg-secondary px-2 py-1 text-xs text-accent">python scripts/train_cancellation_model.py</code>
-                )}
+                <p>{t("cancel.noActiveOrders")}</p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <>
+              <div className="max-h-[640px] overflow-auto">
                 <table className="w-full text-left text-sm text-foreground">
-                  <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
+                  <thead className="sticky top-0 z-10 bg-muted text-xs uppercase text-muted-foreground">
                     <tr>
                       <th className="px-5 py-3 font-semibold">{t("col.orderId")}</th>
                       <th className="px-5 py-3 font-semibold">{t("col.merchantZone")}</th>
@@ -505,13 +719,21 @@ export default function CancellationsPage() {
                   <tbody className="divide-y divide-border">
                     {queueOrders.length === 0 ? (
                       <tr><td colSpan={6} className="p-8 text-center text-muted-foreground">{t("cancel.noOrdersMatch")}</td></tr>
-                    ) : queueOrders.map((o) => {
+                    ) : pagedQueueOrders.map((o) => {
                       const id = o.order_id ?? "—"
                       const factor = o.top_risk_factors?.[0]?.feature?.replace(/^num__|^cat__/, "").replace(/_/g, " ") ?? "—"
                       const isOpen = expanded === o.order_id
+                      const isHighlighted = highlightOrder != null && o.order_id === highlightOrder
                       return (
                         <React.Fragment key={id}>
-                          <tr className="cursor-pointer transition-colors hover:bg-muted/50" onClick={() => toggleExpand(o.order_id)}>
+                          <tr
+                            ref={(el) => { if (o.order_id) queueRowRefs.current[o.order_id] = el }}
+                            className={cn(
+                              "cursor-pointer transition-colors hover:bg-muted/50",
+                              isHighlighted && "bg-primary/15 animate-pulse",
+                            )}
+                            onClick={() => toggleExpand(o.order_id)}
+                          >
                             <td className="px-5 py-3 font-medium">{id}</td>
                             <td className="px-5 py-3">
                               <div className="font-medium text-foreground">{o.restaurant_name ?? "—"}</div>
@@ -567,38 +789,35 @@ export default function CancellationsPage() {
                   </tbody>
                 </table>
               </div>
+
+              {queueTotalPages > 1 && (
+                <div className="flex items-center justify-between border-t border-border px-5 py-3 text-xs text-muted-foreground">
+                  <span>
+                    {t("cancel.queuePageRange", {
+                      from: queuePageStart + 1,
+                      to: Math.min(queuePageStart + QUEUE_PAGE_SIZE, queueOrders.length),
+                      total: queueOrders.length.toLocaleString(),
+                    })}
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => setQueuePage(Math.max(0, queueSafePage - 1))} disabled={queueSafePage === 0}
+                      className="flex size-7 items-center justify-center rounded-md border border-border disabled:opacity-40" aria-label={t("a11y.prevPage")}>
+                      <ChevronLeft className="size-4 rtl:-scale-x-100" />
+                    </button>
+                    <span className="px-2 tabular-nums">{queueSafePage + 1} / {queueTotalPages}</span>
+                    <button onClick={() => setQueuePage(Math.min(queueTotalPages - 1, queueSafePage + 1))} disabled={queueSafePage >= queueTotalPages - 1}
+                      className="flex size-7 items-center justify-center rounded-md border border-border disabled:opacity-40" aria-label={t("a11y.nextPage")}>
+                      <ChevronRight className="size-4 rtl:-scale-x-100" />
+                    </button>
+                  </div>
+                </div>
+              )}
+              </>
             )}
           </div>
 
-          {/* Model card + Drivers report */}
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_2fr]">
-            <div className="flex flex-col justify-between rounded-xl border border-border bg-sidebar p-5 shadow-sm">
-              <div>
-                <div className="mb-1 flex items-center gap-2 text-primary">
-                  <Target className="size-5" />
-                  <h2 className="text-sm font-semibold uppercase tracking-wide">{t("cancel.modelPerformance")}</h2>
-                </div>
-                <h3 className="mb-4 text-xs text-muted-foreground">{modelInfo?.algorithm ?? t("cancel.notTrained")}</h3>
-
-                {modelReady ? (
-                  <div className="space-y-3">
-                    <Metric label="ROC-AUC" value={modelInfo?.roc_auc != null ? modelInfo.roc_auc.toFixed(3) : "—"} />
-                    <Metric label={t("cancel.decisionThreshold")} value={modelInfo?.threshold != null ? modelInfo.threshold.toFixed(2) : "—"} />
-                    <Metric label={t("cancel.features")} value={modelInfo?.n_features?.toLocaleString() ?? "—"} />
-                    <Metric label={t("cancel.trainingRows")} value={modelInfo?.n_training_rows?.toLocaleString() ?? "—"} last />
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    {t("cancel.runTraining")}
-                  </p>
-                )}
-              </div>
-              <div className="mt-4 rounded-md bg-muted/50 p-3 text-xs leading-relaxed text-muted-foreground">
-                <strong>{t("cancel.highRecall")}</strong>{t("cancel.highRecallDesc")}
-                {modelInfo?.trained_at && <div className="mt-1">{t("cancel.lastTrained", { date: modelInfo.trained_at.slice(0, 16).replace("T", " ") })}</div>}
-              </div>
-            </div>
-
+          {/* Drivers report */}
+          <div className="grid grid-cols-1 gap-6">
             <div className="flex flex-col rounded-xl border border-border bg-card p-6 shadow-sm">
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="text-xl font-bold text-foreground">{t("cancel.driversReport")}</h2>
@@ -670,8 +889,6 @@ export default function CancellationsPage() {
             </div>
           </div>
 
-          {/* Gemini chat */}
-          <CancellationChat />
           </>
           )}
 
@@ -680,15 +897,6 @@ export default function CancellationsPage() {
           </footer>
         </main>
       </div>
-    </div>
-  )
-}
-
-function Metric({ label, value, last = false }: { label: string; value: string; last?: boolean }) {
-  return (
-    <div className={cn("flex items-center justify-between", !last && "border-b border-border pb-2")}>
-      <span className="text-sm text-muted-foreground">{label}</span>
-      <span className="font-semibold text-foreground">{value}</span>
     </div>
   )
 }

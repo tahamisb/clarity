@@ -11,7 +11,7 @@ from app.models.schemas import (
     MessageCreate, MessageResponse, MessagesListResponse,
     MessagesUploadRequest, MessagesUploadResponse, TextClassificationResponse,
 )
-from app.services import bq_text as bq
+from app.services import db_text as bq
 from app.utils.helpers import parse_datetime_or_now, preprocess, utcnow_iso
 
 router = APIRouter(prefix="/api/v1/messages", tags=["messages"])
@@ -50,7 +50,7 @@ async def upload_messages(req: MessagesUploadRequest):
     try:
         ids = await bq.insert_messages(rows)
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"BigQuery insert failed: {exc}")
+        raise HTTPException(status_code=500, detail=f"Message insert failed: {exc}")
     return MessagesUploadResponse(ingested=len(ids), skipped=0, message_ids=ids)
 
 
@@ -89,7 +89,7 @@ async def upload_messages_csv(file: UploadFile = File(...)):
     try:
         ids = await bq.insert_messages(rows)
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"BigQuery insert failed: {exc}")
+        raise HTTPException(status_code=500, detail=f"Message insert failed: {exc}")
     return MessagesUploadResponse(ingested=len(ids), skipped=skipped, message_ids=ids)
 
 

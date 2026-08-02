@@ -79,7 +79,7 @@ RAW_COLUMNS = [
     "cuisine",
     "zone_name",
     "customer_zone",
-    "rafeeq_time_to_accept_order_min",
+    "clarity_time_to_accept_order_min",
     "vendor_to_accept_order_min",
     "preparing_time_min",  # only used to build the vendor's PRIOR average
 ]
@@ -104,7 +104,7 @@ NUMERIC_FEATURES = [
     "is_treasure",
     "has_discount",
     "has_coupon",
-    "rafeeq_time_to_accept_order_min",
+    "clarity_time_to_accept_order_min",
     "vendor_to_accept_order_min",
     "vendor_cancel_rate_30d",
     "zone_cancel_rate_30d",
@@ -258,7 +258,7 @@ def _engineer_base(df: pd.DataFrame) -> pd.DataFrame:
     out["delivery_charge"] = _to_float(df["delivery_charge"])
     out["vendor_to_customer_dist"] = _to_float(df["vendor_to_customer_dist"])
     out["driver_vendor_dist"] = _to_float(df["driver_vendor_dist"])
-    out["rafeeq_time_to_accept_order_min"] = _to_float(df["rafeeq_time_to_accept_order_min"])
+    out["clarity_time_to_accept_order_min"] = _to_float(df["clarity_time_to_accept_order_min"])
     out["vendor_to_accept_order_min"] = _to_float(df["vendor_to_accept_order_min"])
 
     out["is_pre_order"] = _to_binary(df["is_pre_order"])

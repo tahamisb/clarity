@@ -18,7 +18,7 @@ router = APIRouter(tags=["call-analytics"])
 @router.get("/calls")
 async def list_calls(
     page: int = Query(1, ge=1),
-    page_size: int = Query(200, ge=1, le=500),
+    page_size: int = Query(200, ge=1, le=1000),
 ):
     return await get_calls(page, page_size)
 

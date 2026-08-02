@@ -52,3 +52,11 @@ backend/artifacts/*.pkl
 .DS_Store
 Thumbs.db
 .claude/settings.local.json
+
+# ---------------------------------------------------------------------------
+# Local SQLite warehouse — generated, never committed.
+# Rebuild with: cd backend && python scripts/generate_mock_db.py
+# ---------------------------------------------------------------------------
+backend/data/*.db
+backend/data/*.db-wal
+backend/data/*.db-shm

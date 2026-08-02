@@ -23,6 +23,7 @@ from app.models.cancellation import (
 )
 from app.services import cancellation_service as svc
 from app.services import predictor_service as predictor
+from app.services import verticals
 from app.services.predictor_service import ModelUnavailable
 
 router = APIRouter(prefix="/api/cancellation", tags=["cancellation"])
@@ -59,7 +60,7 @@ async def predict_batch(req: BatchPredictRequest, engine: str = Query("auto", pa
 
 
 @router.get("/predict/live-queue")
-async def live_queue(limit: int = Query(50, ge=1, le=200), engine: str = Query("auto", pattern=_ENGINES)):
+async def live_queue(limit: int = Query(500, ge=1, le=500), engine: str = Query("auto", pattern=_ENGINES)):
     try:
         return await predictor.live_queue(limit, engine=engine)
     except ModelUnavailable as exc:
@@ -86,44 +87,64 @@ def _window(start: Optional[str], end: Optional[str]) -> tuple[Optional[str], Op
     return start, end
 
 
+def _vertical(vertical: Optional[str]) -> Optional[str]:
+    """Whitelist-validate the vertical filter (safe to interpolate downstream)."""
+    if vertical is not None and not verticals.is_valid(vertical):
+        raise HTTPException(status_code=422, detail=f"vertical must be one of {list(verticals.VERTICALS)}")
+    return vertical
+
+
 @router.get("/analytics/trend")
-async def analytics_trend(start: Optional[str] = Query(None), end: Optional[str] = Query(None)):
-    return await svc.get_trend(*_window(start, end))
+async def analytics_trend(start: Optional[str] = Query(None), end: Optional[str] = Query(None),
+                          vertical: Optional[str] = Query(None)):
+    return await svc.get_trend(*_window(start, end), _vertical(vertical))
 
 
 @router.get("/analytics/by-merchant")
-async def analytics_by_merchant(start: Optional[str] = Query(None), end: Optional[str] = Query(None)):
-    return await svc.get_by_merchant(*_window(start, end))
+async def analytics_by_merchant(start: Optional[str] = Query(None), end: Optional[str] = Query(None),
+                                vertical: Optional[str] = Query(None)):
+    return await svc.get_by_merchant(*_window(start, end), _vertical(vertical))
 
 
 @router.get("/analytics/by-zone")
-async def analytics_by_zone(start: Optional[str] = Query(None), end: Optional[str] = Query(None)):
-    return await svc.get_by_zone(*_window(start, end))
+async def analytics_by_zone(start: Optional[str] = Query(None), end: Optional[str] = Query(None),
+                            vertical: Optional[str] = Query(None)):
+    return await svc.get_by_zone(*_window(start, end), _vertical(vertical))
 
 
 @router.get("/analytics/by-time")
-async def analytics_by_time(start: Optional[str] = Query(None), end: Optional[str] = Query(None)):
-    return await svc.get_by_time(*_window(start, end))
+async def analytics_by_time(start: Optional[str] = Query(None), end: Optional[str] = Query(None),
+                            vertical: Optional[str] = Query(None)):
+    return await svc.get_by_time(*_window(start, end), _vertical(vertical))
 
 
 @router.get("/analytics/by-day")
-async def analytics_by_day(start: Optional[str] = Query(None), end: Optional[str] = Query(None)):
-    return await svc.get_by_dow(*_window(start, end))
+async def analytics_by_day(start: Optional[str] = Query(None), end: Optional[str] = Query(None),
+                           vertical: Optional[str] = Query(None)):
+    return await svc.get_by_dow(*_window(start, end), _vertical(vertical))
 
 
 @router.get("/analytics/by-order-size")
-async def analytics_by_order_size(start: Optional[str] = Query(None), end: Optional[str] = Query(None)):
-    return await svc.get_by_order_size(*_window(start, end))
+async def analytics_by_order_size(start: Optional[str] = Query(None), end: Optional[str] = Query(None),
+                                  vertical: Optional[str] = Query(None)):
+    return await svc.get_by_order_size(*_window(start, end), _vertical(vertical))
 
 
 @router.get("/analytics/by-actor")
-async def analytics_by_actor(start: Optional[str] = Query(None), end: Optional[str] = Query(None)):
-    return await svc.get_by_actor(*_window(start, end))
+async def analytics_by_actor(start: Optional[str] = Query(None), end: Optional[str] = Query(None),
+                             vertical: Optional[str] = Query(None)):
+    return await svc.get_by_actor(*_window(start, end), _vertical(vertical))
 
 
 @router.get("/analytics/crosstabs")
-async def analytics_crosstabs(start: Optional[str] = Query(None), end: Optional[str] = Query(None)):
-    return await svc.get_crosstabs(*_window(start, end))
+async def analytics_crosstabs(start: Optional[str] = Query(None), end: Optional[str] = Query(None),
+                              vertical: Optional[str] = Query(None)):
+    return await svc.get_crosstabs(*_window(start, end), _vertical(vertical))
+
+
+@router.get("/analytics/by-vertical")
+async def analytics_by_vertical(start: Optional[str] = Query(None), end: Optional[str] = Query(None)):
+    return await svc.get_by_vertical(*_window(start, end))
 
 
 @router.get("/analytics/drivers-report")
@@ -193,20 +214,8 @@ async def model_health():
 
 @router.post("/model/retrain")
 async def model_retrain():
-    """
-    Kick off the training script as a detached background process. Training is a
-    long-running offline job (BigQuery pull + Optuna), so this returns immediately.
-    """
-    script = Path(__file__).resolve().parents[2] / "scripts" / "train_cancellation_model.py"
-    if not script.exists():
-        raise HTTPException(status_code=500, detail=f"Training script not found at {script}")
-    try:
-        subprocess.Popen(
-            [sys.executable, str(script)],
-            cwd=str(script.parents[1]),
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(status_code=500, detail=f"Failed to start training: {exc}")
-    return {"status": "started", "detail": "Training launched in the background. Poll /model/info for completion."}
+    """Retraining needs the production warehouse; scoring here is Gemini-only."""
+    raise HTTPException(
+        status_code=501,
+        detail="Model retraining is unavailable on the local dataset — scoring runs on the Gemini engine.",
+    )

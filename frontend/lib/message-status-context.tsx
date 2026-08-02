@@ -19,7 +19,7 @@ import {
 
 export type MessageStatus = { resolved: boolean; flagged: boolean }
 
-const STORAGE_KEY = "rafeeq.message-status.v1"
+const STORAGE_KEY = "clarity.message-status.v1"
 
 type StatusMap = Record<string, Partial<MessageStatus>>
 

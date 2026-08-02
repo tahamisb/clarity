@@ -1,5 +1,5 @@
 """
-Pillar 02 analytics — aggregates bq_text query results into API response shapes.
+Pillar 02 analytics — aggregates db_text query results into API response shapes.
 """
 
 from collections import defaultdict
@@ -12,7 +12,8 @@ from app.models.schemas import (
     SharedIntentRow, TopTriggersResponse, WeeklyBucket,
     ZoneHeatmapResponse, ZoneRow,
 )
-from app.services import bq_text as bq
+from app.services import db_text as bq
+from app.services.ttl_cache import ttl_cache
 
 _CALL_TO_TEXT_INTENT = {
     "complaint": "complaint", "refund_request": "refund",
@@ -24,8 +25,11 @@ _CALL_TO_TEXT_INTENT = {
 }
 
 
-async def get_sentiment_trend(start: Optional[str] = None, end: Optional[str] = None) -> SentimentTrendResponse:
-    rows = await bq.query_sentiment_trend(start, end)
+@ttl_cache
+async def get_sentiment_trend(
+    start: Optional[str] = None, end: Optional[str] = None, vertical: Optional[str] = None,
+) -> SentimentTrendResponse:
+    rows = await bq.query_sentiment_trend(start, end, vertical)
     buckets: dict[str, dict[str, int]] = defaultdict(lambda: {"positive": 0, "neutral": 0, "negative": 0})
     for r in rows:
         s = r["sentiment"]
@@ -46,18 +50,20 @@ async def get_sentiment_trend(start: Optional[str] = None, end: Optional[str] = 
     return SentimentTrendResponse(weeks=weeks)
 
 
+@ttl_cache
 async def get_top_negative_triggers(
     merchant: Optional[str] = None, zone: Optional[str] = None, time_of_day: Optional[str] = None,
-    start: Optional[str] = None, end: Optional[str] = None,
+    start: Optional[str] = None, end: Optional[str] = None, vertical: Optional[str] = None,
 ) -> TopTriggersResponse:
     rows = await bq.query_top_triggers(
-        merchant=merchant, zone=zone, time_of_day=time_of_day, start=start, end=end
+        merchant=merchant, zone=zone, time_of_day=time_of_day, start=start, end=end, vertical=vertical
     )
     triggers = [
         NegativeTrigger(
             trigger=r["trigger"], count=int(r["cnt"]),
             top_merchants=list(r.get("top_merchants") or []),
             top_zones=list(r.get("top_zones") or []),
+            top_vertical=r.get("top_vertical"),
             time_of_day_distribution={
                 "morning": int(r.get("morning_cnt") or 0),
                 "afternoon": int(r.get("afternoon_cnt") or 0),
@@ -69,12 +75,15 @@ async def get_top_negative_triggers(
     ]
     return TopTriggersResponse(
         triggers=triggers,
-        filters_applied={"merchant": merchant, "zone": zone, "time_of_day": time_of_day},
+        filters_applied={"merchant": merchant, "zone": zone, "time_of_day": time_of_day, "vertical": vertical},
     )
 
 
-async def get_cross_channel(start: Optional[str] = None, end: Optional[str] = None) -> CrossChannelResponse:
-    data = await bq.query_cross_channel_data(start, end)
+@ttl_cache
+async def get_cross_channel(
+    start: Optional[str] = None, end: Optional[str] = None, vertical: Optional[str] = None,
+) -> CrossChannelResponse:
+    data = await bq.query_cross_channel_data(start, end, vertical)
 
     def _summary(d: dict) -> ChannelSentimentSummary:
         total = d.get("total", 0)
@@ -104,8 +113,11 @@ async def get_cross_channel(start: Optional[str] = None, end: Optional[str] = No
     )
 
 
-async def get_intent_distribution(start: Optional[str] = None, end: Optional[str] = None) -> IntentDistributionResponse:
-    rows = await bq.query_intent_distribution(start, end)
+@ttl_cache
+async def get_intent_distribution(
+    start: Optional[str] = None, end: Optional[str] = None, vertical: Optional[str] = None,
+) -> IntentDistributionResponse:
+    rows = await bq.query_intent_distribution(start, end, vertical)
     total = sum(int(r["cnt"]) for r in rows)
     return IntentDistributionResponse(total=total, intents=[
         IntentRow(intent=r["intent"], count=int(r["cnt"]),
@@ -114,29 +126,98 @@ async def get_intent_distribution(start: Optional[str] = None, end: Optional[str
     ])
 
 
-async def get_merchant_sentiment(start: Optional[str] = None, end: Optional[str] = None) -> MerchantSentimentResponse:
-    rows = await bq.query_merchant_sentiment(start, end)
+@ttl_cache
+async def get_merchant_sentiment(
+    start: Optional[str] = None, end: Optional[str] = None, vertical: Optional[str] = None,
+) -> MerchantSentimentResponse:
+    rows = await bq.query_merchant_sentiment(start, end, vertical)
     merchants = []
     for r in rows:
         total, neg = int(r["total"]), int(r["negative"])
         merchants.append(MerchantSentimentRow(
-            merchant_name=r["merchant_name"], total=total,
+            merchant_name=r["merchant_name"], vertical=r.get("vertical"), total=total,
             positive=int(r["positive"]), neutral=int(r["neutral"]), negative=neg,
             negative_pct=round(neg / total * 100, 1) if total else 0.0,
         ))
     return MerchantSentimentResponse(merchants=merchants)
 
 
-async def get_zone_heatmap(start: Optional[str] = None, end: Optional[str] = None) -> ZoneHeatmapResponse:
-    rows = await bq.query_zone_heatmap(start, end)
+@ttl_cache
+async def get_zone_heatmap(
+    start: Optional[str] = None, end: Optional[str] = None, vertical: Optional[str] = None,
+) -> ZoneHeatmapResponse:
+    rows = await bq.query_zone_heatmap(start, end, vertical)
     zones = []
     for r in rows:
         total, neg = int(r["total"]), int(r["negative"])
         zones.append(ZoneRow(
             zone=r["zone"], total=total, negative=neg,
             negative_pct=round(neg / total * 100, 1) if total else 0.0,
+            top_vertical=r.get("top_vertical"),
         ))
     return ZoneHeatmapResponse(zones=zones)
+
+
+@ttl_cache
+async def get_message_overview(
+    start: Optional[str] = None, end: Optional[str] = None,
+    chat_sla_hours: float = 4.0, general_sla_hours: float = 24.0,
+    vertical: Optional[str] = None,
+) -> dict:
+    """Full-corpus stats for the Support Messages stat cards, time-of-day chart
+    and SLA banner. Returns a plain dict (no response_model — the shape is UI-only
+    and not reused elsewhere)."""
+    r = await bq.query_message_overview(start, end, chat_sla_hours, general_sla_hours, vertical)
+    total = int(r["total"])
+
+    def tod(name: str) -> dict:
+        pos, neu, neg = (int(r[f"{name}_{s}"]) for s in ("positive", "neutral", "negative"))
+        bucket = pos + neu + neg
+        pct = lambda x: round(x / bucket * 100) if bucket else 0
+        return {"time": name.capitalize(), "positive": pct(pos), "neutral": pct(neu), "negative": pct(neg)}
+
+    return {
+        "total": total,
+        "negative_pct": round(int(r["negative"]) / total * 100, 1) if total else 0.0,
+        # Bot→human handovers (messages.agent_name non-null) as a share of all
+        # analysable chats in the window.
+        "escalated": int(r["escalated"]),
+        "escalation_rate_pct": round(int(r["escalated"]) / total * 100, 1) if total else 0.0,
+        "top_intent": r.get("top_intent"),
+        "top_channel": r.get("top_channel"),
+        "top_vertical": r.get("top_vertical"),
+        "time_of_day": [tod(n) for n in ("morning", "afternoon", "evening", "night")],
+        "sla_breaches": r["sla_breaches"],
+    }
+
+
+async def get_negative_customers(
+    start: Optional[str] = None, end: Optional[str] = None, vertical: Optional[str] = None,
+) -> list[dict]:
+    """Distinct customers with negative sentiment in the window — for the CSV
+    export marketing uses to target coupon campaigns."""
+    rows = await bq.query_negative_customers(start, end, vertical)
+    return [
+        {"customer_id": r["customer_id"],
+         "negative_messages": int(r["negative_messages"]),
+         "last_negative_at": r["last_negative_at"]}
+        for r in rows
+    ]
+
+
+@ttl_cache
+async def get_sla_breaches(
+    start: Optional[str] = None, end: Optional[str] = None,
+    chat_sla_hours: float = 4.0, general_sla_hours: float = 24.0,
+    vertical: Optional[str] = None,
+) -> list[dict]:
+    """Individual SLA-breaching messages for the notification drill-down."""
+    rows = await bq.query_sla_breaches(start, end, chat_sla_hours, general_sla_hours, vertical)
+    return [
+        {"message_id": r["message_id"], "channel": r["channel"],
+         "hours": float(r["hours"]), "resolved": bool(r["resolved"])}
+        for r in rows
+    ]
 
 
 async def get_accuracy() -> AccuracyResponse:

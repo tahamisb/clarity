@@ -1,0 +1,74 @@
+[
+  {
+    "reason": "Items out of stock at vendor",
+    "cancelled_by": "Vendor",
+    "cancellations": 903,
+    "avg_order_value": 64.41
+  },
+  {
+    "reason": "Customer changed mind",
+    "cancelled_by": "Customer",
+    "cancellations": 656,
+    "avg_order_value": 63.37
+  },
+  {
+    "reason": "Vendor not answering",
+    "cancelled_by": "Vendor",
+    "cancellations": 623,
+    "avg_order_value": 64.14
+  },
+  {
+    "reason": "Ordered by mistake",
+    "cancelled_by": "Customer",
+    "cancellations": 571,
+    "avg_order_value": 65.26
+  },
+  {
+    "reason": "No driver available",
+    "cancelled_by": "Clarity Ops",
+    "cancellations": 526,
+    "avg_order_value": 65.18
+  },
+  {
+    "reason": "Delivery time too long",
+    "cancelled_by": "Customer",
+    "cancellations": 447,
+    "avg_order_value": 61.47
+  },
+  {
+    "reason": "Vendor closed",
+    "cancelled_by": "Vendor",
+    "cancellations": 340,
+    "avg_order_value": 61.6
+  },
+  {
+    "reason": "Wrong delivery address",
+    "cancelled_by": "Customer",
+    "cancellations": 300,
+    "avg_order_value": 66.92
+  },
+  {
+    "reason": "Payment failed",
+    "cancelled_by": "Clarity Ops",
+    "cancellations": 294,
+    "avg_order_value": 61.83
+  },
+  {
+    "reason": "Duplicate order",
+    "cancelled_by": "Clarity Ops",
+    "cancellations": 221,
+    "avg_order_value": 60.99
+  },
+  {
+    "reason": "Customer unreachable",
+    "cancelled_by": "Driver",
+    "cancellations": 197,
+    "avg_order_value": 65.68
+  },
+  {
+    "reason": "Area out of coverage",
+    "cancelled_by": "Clarity Ops",
+    "cancellations": 110,
+    "avg_order_value": 62.32
+  }
+]

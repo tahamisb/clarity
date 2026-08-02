@@ -2,6 +2,8 @@ import re
 import unicodedata
 from datetime import datetime, timezone
 
+from app.utils.clock import FROZEN_NOW
+
 
 _PHONE_RE = re.compile(r"\+?[\d\s\-\(\)]{7,}")
 _EMAIL_RE = re.compile(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}")
@@ -24,20 +26,21 @@ def preprocess(text: str) -> str:
     return redact_pii(clean_text(text))
 
 
+# "Now" is frozen app-wide — see app/utils/clock.py.
 def utcnow_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return FROZEN_NOW.isoformat()
 
 
 def parse_datetime_or_now(value: "str | datetime | None") -> datetime:
     if value is None:
-        return datetime.now(timezone.utc)
+        return FROZEN_NOW
     if isinstance(value, datetime):
         return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
     try:
         dt = datetime.fromisoformat(value)
         return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
     except ValueError:
-        return datetime.now(timezone.utc)
+        return FROZEN_NOW
 
 
 def strip_markdown_fences(text: str) -> str:

@@ -54,7 +54,7 @@ class OrderInput(BaseModel):
     zone_name: Optional[str] = None
     customer_zone: Optional[str] = None
 
-    rafeeq_time_to_accept_order_min: Optional[float] = None
+    clarity_time_to_accept_order_min: Optional[float] = None
     vendor_to_accept_order_min: Optional[float] = None
 
     # Optional pre-computed historical features (otherwise looked up from BQ)

@@ -1,4 +1,4 @@
-import { type Sentiment } from "./rafeeq-data"
+import { type Sentiment } from "./clarity-data"
 
 export type Channel = "App" | "WhatsApp" | "Ticket"
 export type TimeOfDay = "Morning" | "Afternoon" | "Evening" | "Night"
@@ -16,6 +16,8 @@ export type SupportMessage = {
   timeOfDay: TimeOfDay
   date: string
   merchant?: string
+  /** Business vertical of the merchant (Restaurants | Grocery | Market | Health & Wellness | Other). */
+  vertical?: string
   suggestedReply: string
   /** True once the conversation has been closed (has a closed_at). */
   resolved: boolean

@@ -116,7 +116,7 @@ export const CONVERSATION_FLOWS: Record<string, { happy: any[], escalation: any[
       { sender: "bot", text: "Thank you. I have verified the issue. Would you prefer a refund for the missing item or a replacement?", time: "02:03 PM" },
       { sender: "customer", text: "Refund to wallet please", time: "02:04 PM" },
       { sender: "system", text: "→ Processing refund...", time: "02:04 PM" },
-      { sender: "bot", text: "Done! The amount has been credited to your Rafeeq Wallet.", time: "02:04 PM" }
+      { sender: "bot", text: "Done! The amount has been credited to your Clarity Wallet.", time: "02:04 PM" }
     ],
     escalation: [
       { sender: "bot", text: "مرحباً! كيف يمكنني مساعدتك؟", time: "03:30 PM" },

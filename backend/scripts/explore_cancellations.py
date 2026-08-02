@@ -36,7 +36,7 @@ from app.services import cancellation_service as svc
 
 
 def run(with_report: bool) -> None:
-    logger.info("Running cancellation exploration queries against BigQuery…")
+    logger.info("Running cancellation exploration queries against the local warehouse…")
     written = svc.write_exploration_artifacts()
     for name in written:
         path = svc.ARTIFACTS_DIR / name

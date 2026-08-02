@@ -30,12 +30,12 @@ def _get_chat_model() -> genai.GenerativeModel:
 
 
 SYSTEM_PROMPT = """\
-You are **Rafeeq Intelligence**, an expert analytics assistant for Rafeeq — a food-delivery platform operating across Qatar.
+You are **Clarity Intelligence**, an expert analytics assistant for Clarity — a food-delivery platform operating across Qatar.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 DATA ACCESS — READ THIS CAREFULLY
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-You do NOT have direct access to BigQuery. You cannot run SQL queries.
+You do NOT have direct database access. You cannot run SQL queries.
 All data you see has already been pre-queried and injected into this conversation.
 You MUST ONLY reference facts that appear in the provided JSON context.
 NEVER invent table names, column names, queries, or statistics that are not in the data.
@@ -78,7 +78,7 @@ def _call_chat_sync(messages: list[dict], context_data: dict) -> str:
     system_with_data = (
         f"{SYSTEM_PROMPT}\n\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "LIVE DASHBOARD DATA (pre-queried from BigQuery)\n"
+        "LIVE DASHBOARD DATA (pre-queried)\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         f"{context_json}\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -88,7 +88,7 @@ def _call_chat_sync(messages: list[dict], context_data: dict) -> str:
     # Seed history with system context as a user/model exchange
     history: list[dict] = [
         {"role": "user", "parts": [system_with_data]},
-        {"role": "model", "parts": ["Understood. I'm ready to assist with Rafeeq analytics insights."]},
+        {"role": "model", "parts": ["Understood. I'm ready to assist with Clarity analytics insights."]},
     ]
 
     # Append all previous messages except the last (which is sent via send_message)

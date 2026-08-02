@@ -1,0 +1,409 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clarity Analytics — How It Works</title>
+</head>
+<body>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  :root {
+    --paper: #F7F8F7;
+    --ink: #22302E;
+    --ink-soft: #55645F;
+    --line: #DDE4E1;
+    --card: #FFFFFF;
+    --accent: #0E7A72;
+    --accent-soft: #E3F0EE;
+    --future: #B45309;
+    --future-soft: #F7EDE0;
+    --risk: #B4453A;
+    --risk-soft: #F6E7E5;
+    --ok: #2E7D4F;
+    --ok-soft: #E5F0E8;
+    --mono: ui-monospace, "Cascadia Code", Consolas, monospace;
+    --serif: Charter, "Bitstream Charter", Cambria, Georgia, serif;
+    --sans: system-ui, "Segoe UI", -apple-system, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #171E1D;
+      --ink: #E4EAE8;
+      --ink-soft: #9AA8A4;
+      --line: #2C3835;
+      --card: #1F2827;
+      --accent: #4FB3A9;
+      --accent-soft: #1D3330;
+      --future: #E09A4E;
+      --future-soft: #33281B;
+      --risk: #D97E74;
+      --risk-soft: #382220;
+      --ok: #6FBF8D;
+      --ok-soft: #1E3126;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #171E1D; --ink: #E4EAE8; --ink-soft: #9AA8A4; --line: #2C3835;
+    --card: #1F2827; --accent: #4FB3A9; --accent-soft: #1D3330;
+    --future: #E09A4E; --future-soft: #33281B;
+    --risk: #D97E74; --risk-soft: #382220; --ok: #6FBF8D; --ok-soft: #1E3126;
+  }
+  :root[data-theme="light"] {
+    --paper: #F7F8F7; --ink: #22302E; --ink-soft: #55645F; --line: #DDE4E1;
+    --card: #FFFFFF; --accent: #0E7A72; --accent-soft: #E3F0EE;
+    --future: #B45309; --future-soft: #F7EDE0;
+    --risk: #B4453A; --risk-soft: #F6E7E5; --ok: #2E7D4F; --ok-soft: #E5F0E8;
+  }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--sans);
+    line-height: 1.65;
+    font-size: 16.5px;
+  }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 24px 96px; }
+  .col { max-width: 70ch; }
+
+  header.hero { padding: 72px 0 40px; border-bottom: 1px solid var(--line); }
+  .eyebrow {
+    font-family: var(--mono); font-size: 12px; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--accent); margin-bottom: 14px;
+  }
+  h1 {
+    font-family: var(--serif); font-weight: 700; font-size: clamp(34px, 5vw, 52px);
+    line-height: 1.08; text-wrap: balance; margin: 0 0 18px;
+  }
+  .lede { font-size: 19px; color: var(--ink-soft); max-width: 62ch; text-wrap: pretty; }
+
+  h2 {
+    font-family: var(--serif); font-size: clamp(26px, 3.4vw, 34px); font-weight: 700;
+    line-height: 1.15; text-wrap: balance; margin: 72px 0 8px;
+  }
+  h3 { font-size: 18px; font-weight: 650; margin: 36px 0 6px; }
+  p { margin: 0 0 16px; max-width: 70ch; }
+  .kicker { color: var(--ink-soft); margin-bottom: 28px; }
+  strong { font-weight: 650; }
+  a { color: var(--accent); }
+
+  /* ---- stack cards ---- */
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; margin: 28px 0; }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 18px 20px;
+  }
+  .card .tech {
+    font-family: var(--mono); font-size: 12.5px; color: var(--accent);
+    letter-spacing: .04em; margin-bottom: 6px;
+  }
+  .card h4 { margin: 0 0 8px; font-size: 16.5px; font-weight: 650; }
+  .card p { font-size: 14.5px; color: var(--ink-soft); margin: 0; }
+
+  /* ---- flowcharts ---- */
+  .flow {
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    padding: 26px 26px 20px; margin: 30px 0; overflow-x: auto;
+  }
+  .flow-title {
+    font-family: var(--mono); font-size: 12px; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--ink-soft); margin-bottom: 20px;
+  }
+  .lane { display: flex; align-items: stretch; flex-wrap: wrap; gap: 6px; row-gap: 18px; margin-bottom: 8px; }
+  .node {
+    flex: 1 1 130px; min-width: 130px; max-width: 220px;
+    border: 1.5px solid var(--line); border-radius: 8px;
+    padding: 12px 14px; background: var(--paper);
+  }
+  .node b { display: block; font-size: 14px; font-weight: 650; margin-bottom: 3px; }
+  .node span { font-size: 12.5px; color: var(--ink-soft); line-height: 1.45; display: block; }
+  .node.src { border-color: var(--ink-soft); }
+  .node.brain { border-color: var(--accent); background: var(--accent-soft); }
+  .node.out { border-color: var(--ok); background: var(--ok-soft); }
+  .node.next { border-color: var(--future); background: var(--future-soft); border-style: dashed; }
+  .arr {
+    align-self: center; color: var(--accent); font-size: 20px; line-height: 1;
+    padding: 0 4px; user-select: none;
+  }
+  .flow-note { font-size: 13px; color: var(--ink-soft); margin: 14px 0 0; }
+  .down { text-align: center; color: var(--accent); font-size: 20px; margin: 10px 0; }
+
+  /* ---- dashboards table ---- */
+  .tablewrap { overflow-x: auto; margin: 28px 0; border: 1px solid var(--line); border-radius: 10px; }
+  table { border-collapse: collapse; width: 100%; background: var(--card); font-size: 14.5px; }
+  th {
+    text-align: left; font-family: var(--mono); font-size: 11.5px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--ink-soft); font-weight: 500;
+    padding: 12px 16px; border-bottom: 1px solid var(--line);
+  }
+  td { padding: 13px 16px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  td:first-child { font-weight: 650; white-space: nowrap; }
+  td .who { font-family: var(--mono); font-size: 12px; color: var(--accent); display: block; margin-top: 3px; }
+
+  /* ---- idea list ---- */
+  .idea {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 10px; padding: 18px 22px; margin: 16px 0; max-width: 78ch;
+  }
+  .idea h4 { margin: 0 0 6px; font-size: 16px; font-weight: 650; }
+  .idea .tag {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--future); background: var(--future-soft); border-radius: 4px;
+    padding: 2px 8px; margin-left: 10px; vertical-align: middle;
+  }
+  .idea p { font-size: 14.5px; color: var(--ink-soft); margin: 0; max-width: 100%; }
+
+  .callout {
+    background: var(--accent-soft); border-radius: 10px; padding: 18px 22px;
+    margin: 26px 0; max-width: 74ch; font-size: 15px;
+  }
+  .callout b { color: var(--accent); }
+
+  ul { padding-left: 22px; max-width: 68ch; }
+  li { margin-bottom: 8px; }
+  li::marker { color: var(--accent); }
+
+  code { font-family: var(--mono); font-size: .88em; background: var(--accent-soft); padding: 1px 6px; border-radius: 4px; }
+
+  footer { margin-top: 80px; padding-top: 24px; border-top: 1px solid var(--line); font-size: 13px; color: var(--ink-soft); font-family: var(--mono); }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .card, .idea { transition: border-color .15s ease; }
+    .card:hover { border-color: var(--accent); }
+  }
+</style>
+
+<div class="wrap">
+
+<header class="hero">
+  <div class="eyebrow">Internal briefing · CX &amp; Call Center Teams</div>
+  <h1>Clarity Analytics: what it is, how it works, and where it goes next</h1>
+  <p class="lede">A plain-language tour of the platform that turns your calls, support chats, and orders into dashboards and predictions, plus a concrete plan for running it on live data.</p>
+</header>
+
+<!-- ============================================================ -->
+<section class="col">
+  <h2>What this thing actually does</h2>
+  <p class="kicker">Three jobs, one platform.</p>
+  <p>Every day, customers call us, chat with support, and place (or cancel) orders. All of that used to sit in raw tables nobody could read. Clarity Analytics reads it <em>for</em> you and answers three questions:</p>
+  <ul>
+    <li><strong>What are customers telling us?</strong> Every support chat and call transcript gets read by AI and tagged: is the customer happy or angry, what triggered it, was it resolved, did we breach SLA.</li>
+    <li><strong>Where is the pain concentrated?</strong> Dashboards slice everything by time, zone, merchant, and vertical (Restaurants, Grocery, Market, Health &amp; Wellness) so you can see <em>where</em> problems cluster, not just that they exist.</li>
+    <li><strong>Which orders are about to cancel?</strong> A prediction engine scores live orders for cancellation risk, so someone can step in before the customer gives up.</li>
+  </ul>
+</section>
+
+<!-- ============================================================ -->
+<section>
+  <h2>The tech stack, in human terms</h2>
+  <p class="kicker col">Four building blocks. You don't need to touch any of them, but it helps to know what each one is when engineers mention them.</p>
+
+  <div class="cards">
+    <div class="card">
+      <div class="tech">Next.js + React + Tailwind</div>
+      <h4>The dashboards (frontend)</h4>
+      <p>The website you actually open. Built with the same tooling as most modern web apps. Handles the English/Arabic toggle, the global time filter (WTD/MTD/QTD/YTD), charts, and the notification bell. Think of it as the storefront.</p>
+    </div>
+    <div class="card">
+      <div class="tech">FastAPI (Python)</div>
+      <h4>The backend (API)</h4>
+      <p>The kitchen behind the storefront. When a dashboard needs numbers, it asks this service. It fetches data, does the math, caches results so pages load instantly, and keeps popular queries pre-warmed every 4 minutes.</p>
+    </div>
+    <div class="card">
+      <div class="tech">Google BigQuery</div>
+      <h4>The data warehouse</h4>
+      <p>Where all the raw material lives today: chat history, call records, order data, and every AI classification we've produced. It's built for huge historical analysis, less so for split-second live lookups (more on that in section 6).</p>
+    </div>
+    <div class="card">
+      <div class="tech">Google Gemini</div>
+      <h4>The AI layer</h4>
+      <p><strong>Gemini</strong> (the same family of AI as ChatGPT) does the reading and the judging. It reads chats and transcripts like a human would: sentiment, topic, resolution. It also looks at an order's details and history to judge cancellation risk and explain its reasoning in plain words.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section>
+  <h2>How the data flows</h2>
+  <p class="kicker col">From a customer typing "where is my order???" to a number on your dashboard.</p>
+
+  <div class="flow">
+    <div class="flow-title">The big picture: today's architecture</div>
+    <div class="lane">
+      <div class="node src"><b>Customer touchpoints</b><span>Support chats · call transcripts · orders &amp; cancellations</span></div>
+      <div class="arr">→</div>
+      <div class="node src"><b>BigQuery warehouse</b><span>Raw history lands here (187k+ chats backfilled)</span></div>
+      <div class="arr">→</div>
+      <div class="node brain"><b>AI processing</b><span>Gemini reads &amp; tags each chat/call, and scores orders for cancellation risk</span></div>
+      <div class="arr">→</div>
+      <div class="node brain"><b>FastAPI backend</b><span>Aggregates, caches, serves clean numbers</span></div>
+      <div class="arr">→</div>
+      <div class="node out"><b>Dashboards</b><span>What you open every morning</span></div>
+    </div>
+    <p class="flow-note">A daily pipeline picks up yesterday's new chats, sends them through Gemini for classification, and writes the results back, so dashboards are current as of the last run, not live to the second.</p>
+  </div>
+
+  <div class="flow">
+    <div class="flow-title">Zoom in: how one support chat gets understood</div>
+    <div class="lane">
+      <div class="node src"><b>Chat closes</b><span>Full conversation stored in chat history</span></div>
+      <div class="arr">→</div>
+      <div class="node"><b>Daily pipeline</b><span>Scheduled task collects new chats</span></div>
+      <div class="arr">→</div>
+      <div class="node brain"><b>Gemini classifies</b><span>Sentiment · topic · trigger · resolved? · SLA breach?</span></div>
+      <div class="arr">→</div>
+      <div class="node"><b>Stored as a record</b><span>One tagged row per conversation</span></div>
+      <div class="arr">→</div>
+      <div class="node out"><b>Support Messages page</b><span>Feed, trends, triggers, zone heatmap</span></div>
+    </div>
+  </div>
+
+  <div class="flow">
+    <div class="flow-title">Zoom in: how an order gets a cancellation risk score</div>
+    <div class="lane">
+      <div class="node src"><b>Order details</b><span>Merchant, zone, basket size, time of day, day of week, past behavior</span></div>
+      <div class="arr">→</div>
+      <div class="node brain"><b>Gemini scores it</b><span>Weighs the order's details against known cancellation patterns</span></div>
+      <div class="arr">→</div>
+      <div class="node brain"><b>Gemini explains it</b><span>A risk level plus a readable "why" for the agent</span></div>
+      <div class="arr">→</div>
+      <div class="node out"><b>Live risk queue</b><span>Cancellations page, highest risk on top</span></div>
+    </div>
+    <p class="flow-note">The scoring isn't random guessing: Gemini is given the historical cancellation patterns (e.g. a specific zone + late night + large basket + a merchant with slow prep times) and judges each order against them.</p>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section>
+  <h2>The four dashboards and who they're for</h2>
+
+  <div class="tablewrap">
+    <table>
+      <thead>
+        <tr><th>Page</th><th>What it shows</th><th>The question it answers</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Call Intelligence<span class="who">Call center leads</span></td>
+          <td>Analyzed call transcripts: sentiment, topics, agent performance signals, call volume trends.</td>
+          <td>"How are our calls going, and what are people calling about?"</td>
+        </tr>
+        <tr>
+          <td>Support Messages<span class="who">CX team</span></td>
+          <td>Every classified chat: sentiment trend over time, top negative triggers, SLA breaches, cross-channel view, zone heatmap. Flag and resolve individual messages.</td>
+          <td>"What's making customers unhappy this week, and where?"</td>
+        </tr>
+        <tr>
+          <td>Cancellations<span class="who">Ops + CX managers</span></td>
+          <td>Cancellation trends by merchant, zone, hour, day, order size, and who cancelled (customer vs. merchant vs. courier), plus the live risk queue of orders predicted to cancel.</td>
+          <td>"Why are we losing orders, and which ones can we still save?"</td>
+        </tr>
+        <tr>
+          <td>CX Dashboard<span class="who">Management</span></td>
+          <td>The bird's-eye view: contact rate (how many orders generate a support contact), headline KPIs, highlights across verticals.</td>
+          <td>"Is the customer experience getting better or worse overall?"</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout col">
+    <b>Everything filters together.</b> The time range (Week/Month/Quarter/Year-to-date), the vertical filter, and English/Arabic apply across every page at once. Managers additionally get a notification bell with SLA, cancellation-spike, and helpfulness alerts based on their role at login.
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section class="col">
+  <h2>Honest limitations of the current setup</h2>
+  <p class="kicker">This is a strong analytics prototype. Here's what it is <em>not</em> yet.</p>
+  <ul>
+    <li><strong>It's snapshot-based, not live.</strong> Chats are classified by a daily pipeline; dashboards show "as of last run." A spike at 2pm shows up tomorrow, not at 2:05pm.</li>
+    <li><strong>BigQuery is built for history, not the hot path.</strong> It's brilliant at "show me six months of trends" and slow/expensive at "check this one order right now." The 4-minute cache warmer exists precisely to paper over this.</li>
+    <li><strong>Predictions score a queue, not the order stream.</strong> The risk queue re-scores a batch of orders; a truly live system would score each order the moment it's placed.</li>
+    <li><strong>Login is a placeholder.</strong> A shared dev password stands in until Google OAuth credentials arrive. Fine for a demo, not for production.</li>
+    <li><strong>A timezone quirk needs care:</strong> chat timestamps are stored in UTC while order times are Qatar local (UTC+3). The code compensates, but a live system should normalize this at the source.</li>
+  </ul>
+</section>
+
+<!-- ============================================================ -->
+<section>
+  <h2>The upgrade: going live with Postgres / AWS</h2>
+  <p class="kicker col">The core idea: keep BigQuery for history and heavy analysis, add a fast operational database (PostgreSQL on AWS RDS) for the live, right-now data. Two databases, two jobs.</p>
+
+  <div class="flow">
+    <div class="flow-title">Proposed architecture: live data path (new pieces dashed)</div>
+    <div class="lane">
+      <div class="node src"><b>Order &amp; chat systems</b><span>Events fire the moment they happen</span></div>
+      <div class="arr">→</div>
+      <div class="node next"><b>Event stream</b><span>Webhooks or AWS Kinesis/SQS: every new order, status change, chat message</span></div>
+      <div class="arr">→</div>
+      <div class="node next"><b>PostgreSQL (AWS RDS)</b><span>Hot store: last ~90 days, millisecond lookups</span></div>
+      <div class="arr">→</div>
+      <div class="node brain"><b>Scoring service</b><span>Gemini scoring each order on arrival instead of in daily batches</span></div>
+      <div class="arr">→</div>
+      <div class="node out"><b>Live dashboards + alerts</b><span>Risk queue updates in seconds, not daily</span></div>
+    </div>
+    <div class="down">↓</div>
+    <div class="lane">
+      <div class="node"><b>Nightly sync to BigQuery</b><span>Postgres data flows into the warehouse for long-term trends and the historical dashboards. Nothing we built gets thrown away</span></div>
+    </div>
+  </div>
+
+  <h3 style="margin-top:44px">Concrete ideas, roughly in order of payoff</h3>
+
+  <div class="idea">
+    <h4>Score every order at placement time <span class="tag">Biggest win</span></h4>
+    <p>Instead of re-scoring a queue, the order system pings the scoring service the moment an order is placed. High-risk orders appear on the Cancellations page within seconds, while there's still time for an agent or an automated nudge (a proactive "your order is being prepared" message) to save it.</p>
+  </div>
+
+  <div class="idea">
+    <h4>Postgres (RDS) as the hot store <span class="tag">Foundation</span></h4>
+    <p>Keep the most recent ~90 days in PostgreSQL on AWS RDS. Dashboards read live counts from Postgres instantly; BigQuery keeps its job as the deep-history archive. This also kills most of the caching gymnastics the backend does today.</p>
+  </div>
+
+  <div class="idea">
+    <h4>Real-time chat sentiment, not daily <span class="tag">CX team</span></h4>
+    <p>Classify chats as they close (or even mid-conversation for long ones) instead of once a day. An angry-sentiment spike about a specific merchant becomes an alert the CX lead sees within minutes: early warning for outages, bad batches, courier shortages.</p>
+  </div>
+
+  <div class="idea">
+    <h4>Push alerts to where agents already work <span class="tag">Call center</span></h4>
+    <p>The notification bell is a start; the next step is pushing high-risk-order and SLA-breach alerts into the tools agents actually stare at all day (Slack/Teams/the CS console), with a one-click "I'm on it" that feeds back into the data.</p>
+  </div>
+
+  <div class="idea">
+    <h4>Close the loop: did the intervention work? <span class="tag">Accuracy</span></h4>
+    <p>When an agent acts on a risk alert, record what they did and whether the order survived. That outcome data is gold: it shows which risk calls Gemini gets right, sharpens the patterns we feed it, and finally answers "is this tool actually saving orders?" with a number.</p>
+  </div>
+
+  <div class="idea">
+    <h4>Refresh the risk patterns monthly <span class="tag">Accuracy</span></h4>
+    <p>Customer behavior shifts (Ramadan, new zones, new merchants). Once a month, re-pull the cancellation patterns from BigQuery history and update what Gemini is told to look for, so its risk calls don't go stale.</p>
+  </div>
+
+  <div class="idea">
+    <h4>Production hygiene <span class="tag">Before launch</span></h4>
+    <p>Turn on real Google OAuth login, normalize all timestamps to one timezone at ingestion, set up AWS-side monitoring/backups for RDS, and keep the existing Gemini cost guardrails (minimal thinking mode, batch API for bulk work); the AI bill is a real budget line.</p>
+  </div>
+
+  <div class="callout col">
+    <b>Why not just move everything to Postgres?</b> Because the two databases are good at opposite things. Postgres answers "what's happening <em>right now</em>" in milliseconds; BigQuery answers "show me every pattern in two years of data" without breaking a sweat. Using each for its job is cheaper and faster than forcing either to do both.
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section class="col">
+  <h2>TL;DR</h2>
+  <p>Clarity Analytics already turns raw chats, calls, and orders into dashboards the CX and call-center teams can act on, with Gemini doing the reading and flagging at-risk orders. The architecture is solid but snapshot-based. The path to production is clear: stream events into a Postgres hot store on AWS, score orders the moment they're placed, alert agents in real time, and keep BigQuery as the long-term memory the risk patterns are drawn from. Nothing gets rebuilt; the live layer slots in front of what already works.</p>
+</section>
+
+<footer>
+  Clarity Analytics · internal briefing · July 2026
+</footer>
+
+</div>
+
+</body>
+</html>

@@ -9,23 +9,28 @@ import {
   useRef,
   useState,
 } from "react"
-import { fetchCalls, fetchLiveQueue, fetchMessages } from "./api"
+import { fetchCalls, fetchLiveQueue, fetchSlaBreaches } from "./api"
 import { useSettings, useAutoRefresh } from "./settings-context"
 import { useRole } from "./use-role"
-import { useMessageStatus } from "./message-status-context"
+import { useTimeFilter } from "./time-filter-context"
 import type { UserRole } from "./roles"
+import { now } from "./frozen-clock"
 
 // ---------------------------------------------------------------------------
 // Role-aware, in-app notifications.
 //
 // The bell in the top bar opens a panel fed by this provider. Notifications are
-// DERIVED from live dashboard data on the same cadence as the dashboards:
+// DERIVED from the same data the dashboards show, so counts match what's on
+// screen. Each breach is ONE notification (individually clickable; filter by the
+// panel's type chips), not a summary:
 //
-//   • SLA breach            → unresolved support messages older than the SLA
-//                             target (Settings → SLA & Alert Configurations).
+//   • SLA breach            → each breaching conversation, server-computed over
+//                             the full window (matches the Messages SLA banner —
+//                             the capped feed missed most). Links to the message.
 //                             Shown to employees AND managers.
-//   • High-risk cancellation→ live-queue orders Gemini/the model flags as
-//                             "high" risk. Shown to employees AND managers.
+//   • High cancellation risk→ each order the live prediction queue flags "high"
+//                             (same queue/engine the Cancellations page shows).
+//                             Shown to employees AND managers.
 //   • Agent helpfulness      → calls where the agent's helpfulness is rated
 //                             "Unhelpful". MANAGER ONLY, and names the agent.
 //
@@ -59,7 +64,7 @@ type NotificationsContextValue = {
 
 const NotificationsContext = createContext<NotificationsContextValue | null>(null)
 
-const STORAGE_KEY = "rafeeq.notifications.v1"
+const STORAGE_KEY = "clarity.notifications.v1"
 /**
  * Safety backstop on items per category — high enough to surface every real
  * breach (there can be hundreds of SLA violations), low enough to keep the DOM
@@ -82,15 +87,15 @@ function loadPersisted(): PersistedState {
 }
 
 function parseDate(value: string | null | undefined): number {
-  if (!value) return Date.now()
+  if (!value) return now().getTime()
   const ts = new Date(value.replace(" ", "T")).getTime()
-  return Number.isNaN(ts) ? Date.now() : ts
+  return Number.isNaN(ts) ? now().getTime() : ts
 }
 
 export function NotificationsProvider({ children }: { children: React.ReactNode }) {
   const { settings, hydrated } = useSettings()
   const role = useRole()
-  const { resolvedIds } = useMessageStatus()
+  const { range, vertical, queryKey } = useTimeFilter()
 
   const [notifications, setNotifications] = useState<AppNotification[]>([])
   const [loading, setLoading] = useState(false)
@@ -116,11 +121,11 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
   }, [])
 
   // Keep the latest config in a ref so refresh() is stable across renders.
-  const cfg = useRef({ settings, role, dismissed, resolvedIds })
-  cfg.current = { settings, role, dismissed, resolvedIds }
+  const cfg = useRef({ settings, role, dismissed, range, vertical })
+  cfg.current = { settings, role, dismissed, range, vertical }
 
   const refresh = useCallback(async () => {
-    const { settings: s, role: r, dismissed: dis, resolvedIds: locallyResolved } = cfg.current
+    const { settings: s, role: r, dismissed: dis, range: win, vertical: vert } = cfg.current
     const wantSla = s.notifySlaBreaches
     const wantCancel = s.notifyHighRiskCancellations
     const wantHelp = r === "manager" && s.notifyAgentHelpfulness
@@ -130,61 +135,46 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
       return
     }
 
-    // Live queue: prefer the app-wide "auto" engine, but if it yields nothing
-    // (e.g. no trained model — auto deliberately returns empty), fall back to the
-    // Gemini engine, which is what the cancellations page surfaces in that case.
-    // Otherwise high-risk orders shown on the page would never raise a notification.
-    const fetchQueue = async () => {
-      const q = await fetchLiveQueue(50)
-      if (q && q.engine !== "none" && q.orders?.length) return q
-      return fetchLiveQueue(50, "gemini")
-    }
-
     setLoading(true)
-    const [messages, liveQueue, calls] = await Promise.all([
-      wantSla ? fetchMessages() : Promise.resolve(null),
-      wantCancel ? fetchQueue() : Promise.resolve(null),
+    // SLA: server-computed breaches over the global window/vertical (matches the
+    // Messages banner). Cancellation: the same live prediction queue the
+    // Cancellations page renders (limit 500, Gemini engine) — not window-scoped,
+    // it's a "pending orders at risk now" view.
+    const [slaBreaches, liveQueue, calls] = await Promise.all([
+      wantSla ? fetchSlaBreaches(win, s.chatSlaHours, s.generalSlaHours, vert) : Promise.resolve(null),
+      wantCancel ? fetchLiveQueue(500) : Promise.resolve(null),
       wantHelp ? fetchCalls() : Promise.resolve(null),
     ])
 
     const next: AppNotification[] = []
 
-    // SLA breaches — conversations whose HANDLING TIME (closed_at − created_at)
-    // exceeded the channel's SLA target. Still-open chats fall back to current age.
-    if (wantSla && messages) {
-      const now = Date.now()
-      const breaches = messages
-        .filter((m) => !locallyResolved.has(m.id))
-        .map((m) => {
-          const ts = parseDate(m.date)
-          const durationHours =
-            m.handlingMinutes != null ? m.handlingMinutes / 60 : (now - ts) / 3_600_000
-          const sla = m.channel === "Ticket" ? s.generalSlaHours : s.chatSlaHours
-          return { m, ts, durationHours, sla }
-        })
-        .filter((b) => b.durationHours > b.sla)
-        .sort((a, b) => b.durationHours - a.durationHours)
-        .slice(0, PER_TYPE_CAP)
-
-      for (const b of breaches) {
-        const took = Math.round(b.durationHours)
+    // SLA breaches — one per breaching conversation, most-overdue first, each
+    // deep-linking to its message on the Messages page.
+    if (wantSla && slaBreaches) {
+      const ts = now().getTime()
+      const channelLabel: Record<string, string> = { app: "App", whatsapp: "WhatsApp", ticket: "Ticket" }
+      for (const b of slaBreaches.slice(0, PER_TYPE_CAP)) {
+        const chan = channelLabel[b.channel] ?? b.channel
+        const sla = b.channel === "ticket" ? s.generalSlaHours : s.chatSlaHours
+        const took = Math.round(b.hours)
+        const msgId = `MSG-${b.message_id.slice(0, 8).toUpperCase()}`
         next.push({
-          id: `sla:${b.m.id}`,
+          id: `sla:${b.message_id}`,
           type: "sla",
-          title: `SLA exceeded · ${b.m.channel}`,
-          description: b.m.resolved
-            ? `${b.m.id} took ${took}h to resolve — past the ${b.sla}h target.`
-            : `${b.m.id} open for ${took}h — past the ${b.sla}h target.`,
+          title: `SLA exceeded · ${chan}`,
+          description: b.resolved
+            ? `${msgId} took ${took}h to resolve — past the ${sla}h target.`
+            : `${msgId} open for ${took}h — past the ${sla}h target.`,
           severity: "high",
-          href: `/messages?msg=${encodeURIComponent(b.m.id)}`,
-          timestamp: b.ts,
+          href: `/messages?msg=${encodeURIComponent(msgId)}`,
+          timestamp: ts,
         })
       }
     }
 
-    // High-risk cancellations — orders the engine flags as "high".
+    // High-risk cancellations — one per order the live queue flags "high".
     if (wantCancel && liveQueue?.orders?.length) {
-      const generated = parseDate(liveQueue.generated_at)
+      const ts = now().getTime()
       const highRisk = liveQueue.orders
         .filter((o) => o.risk_level === "high")
         .sort((a, b) => b.probability - a.probability)
@@ -199,8 +189,8 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
           title: `High cancellation risk · ${Math.round(o.probability * 100)}%`,
           description: `Order ${id}${where ? ` (${where})` : ""} is at high risk of cancellation.`,
           severity: "high",
-          href: "/cancellations",
-          timestamp: generated,
+          href: o.order_id ? `/cancellations?order=${encodeURIComponent(o.order_id)}` : "/cancellations",
+          timestamp: ts,
         })
       }
     }
@@ -226,7 +216,9 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
       }
     }
 
-    const filtered = next
+    // Backend feeds can repeat a source row (e.g. one message breaching twice);
+    // ids must be unique — keep the first occurrence of each.
+    const filtered = [...new Map(next.map((n) => [n.id, n])).values()]
       .filter((n) => !dis.has(n.id))
       .sort((a, b) => b.timestamp - a.timestamp)
 
@@ -242,7 +234,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     hydrated,
     refresh,
     role,
-    resolvedIds,
+    queryKey,
     settings.notifySlaBreaches,
     settings.notifyHighRiskCancellations,
     settings.notifyAgentHelpfulness,
@@ -314,9 +306,9 @@ export function useNotifications(): NotificationsContextValue {
   return ctx
 }
 
-/** "3h ago" style formatter for the panel. */
+/** "3h ago" style formatter for the panel — measured against the frozen clock. */
 export function formatRelative(ts: number): string {
-  const diff = Date.now() - ts
+  const diff = now().getTime() - ts
   if (diff < 60_000) return "just now"
   const mins = Math.floor(diff / 60_000)
   if (mins < 60) return `${mins}m ago`

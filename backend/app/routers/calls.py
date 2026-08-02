@@ -13,7 +13,7 @@ from fastapi import APIRouter, HTTPException
 
 from app.models.schemas import AnalyseRequest, BatchAnalyseRequest, PredictRequest
 from app.services.call_service import analyse_transcript
-from app.services.bq_calls import enrich_orders, save_call_analysis
+from app.services.db_calls import enrich_orders, save_call_analysis
 from app.services.call_analytics_service import clear_cache
 
 router = APIRouter(tags=["calls"])

@@ -70,6 +70,7 @@ class MessageResponse(BaseModel):
     source_channel: str
     merchant_name: Optional[str]
     zone: Optional[str]
+    vertical: Optional[str] = None
     created_at: str
     ingested_at: str
     closed_at: Optional[str] = None
@@ -167,6 +168,7 @@ class NegativeTrigger(BaseModel):
     count: int
     top_merchants: list[str]
     top_zones: list[str]
+    top_vertical: Optional[str] = None
     time_of_day_distribution: dict[str, int]
 
 
@@ -212,6 +214,7 @@ class IntentDistributionResponse(BaseModel):
 
 class MerchantSentimentRow(BaseModel):
     merchant_name: str
+    vertical: Optional[str] = None
     total: int
     positive: int
     neutral: int
@@ -228,6 +231,7 @@ class ZoneRow(BaseModel):
     total: int
     negative: int
     negative_pct: float
+    top_vertical: Optional[str] = None
 
 
 class ZoneHeatmapResponse(BaseModel):
@@ -240,7 +244,7 @@ class ZoneHeatmapResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     status: str
-    bigquery: str
+    database: str
     gemini: str
     version: str = "3.0.0"
 

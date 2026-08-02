@@ -8,19 +8,18 @@ class Settings(BaseSettings):
     # Gemini
     gemini_api_key: str
     gemini_model: str = "gemini-3.5-flash"
+    # Model for high-volume chat/message classification. Cheapest capable tier;
+    # set to gemini-3.5-flash to match Pillar 01 if lite quality ever disappoints.
+    gemini_classify_model: str = "gemini-3.1-flash-lite"
+    # Gemini 3.x models reason ("think") by default at medium level and bill those
+    # tokens as OUTPUT — on our tiny JSON classifications that was ~12x the cost of
+    # the answer itself. minimal | low | medium | high.
+    gemini_thinking_level: str = "minimal"
     gemini_concurrency: int = 5
-
-    # Google Cloud
-    gcp_project_id: str = "long-ceiling-343505"
-    bq_calls_dataset: str = "reports"       # Pillar 01 — call_analysis, vendor_kpi, vendor_items_kpi
-    bq_text_dataset: str = "reports" # Pillar 02 — messages, classifications, labels (same dataset as chat_history)
-    # Safety cap: BigQuery rejects any (non-parametrized) query that would scan
-    # more than this, so a bad WHERE/JOIN can't silently bill the whole warehouse.
-    bq_max_bytes_billed: int = 50 * 1024**3  # 50 GiB
 
     # App
     app_host: str = "0.0.0.0"
-    app_port: int = 8000
+    app_port: int = 8001
     cors_origins: str = "http://localhost:3000,http://localhost:3001"
     log_level: str = "info"
 

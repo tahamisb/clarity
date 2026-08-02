@@ -37,26 +37,13 @@ const cairo = localFont({
 })
 
 export const metadata: Metadata = {
-  title: 'Rafeeq — Call Intelligence',
+  title: 'Clarity — Call Intelligence',
   description:
-    'Rafeeq Call Intelligence — transcribe, classify and analyze support calls across Qatar.',
+    'Clarity Call Intelligence — transcribe, classify and analyze support calls across Qatar.',
   generator: 'v0.app',
   icons: {
-    icon: [
-      {
-        url: '/gorafeeq_logo.svg',
-        media: '(prefers-color-scheme: light)',
-      },
-      {
-        url: '/gorafeeq_logo.svg',
-        media: '(prefers-color-scheme: dark)',
-      },
-      {
-        url: '/gorafeeq_logo.svg',
-        type: 'image/svg+xml',
-      },
-    ],
-    apple: '/apple-icon.png',
+    icon: [{ url: '/logo-mark.svg', type: 'image/svg+xml' }],
+    apple: '/logo-mark.svg',
   },
 }
 
@@ -100,7 +87,8 @@ export default function RootLayout({
       suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} ${archivo.variable} ${cairo.variable}`}
     >
-      <body className="font-sans antialiased">
+      {/* Browser extensions inject attributes onto <body> before hydration. */}
+      <body className="font-sans antialiased" suppressHydrationWarning>
         <SessionProvider>
           <ThemeProvider>
             <SettingsProvider>

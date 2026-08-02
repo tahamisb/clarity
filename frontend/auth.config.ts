@@ -2,21 +2,23 @@ import type { NextAuthConfig } from "next-auth"
 import Google from "next-auth/providers/google"
 
 /**
- * Only Google accounts on this email domain may sign in.
- * There is no sign-up flow — any @gorafeeq.com Google account can log in,
- * everyone else is rejected.
+ * Only Google accounts on this email domain may sign in. There is no sign-up
+ * flow — any account on the domain can log in, everyone else is rejected.
+ * Set NEXT_PUBLIC_ALLOWED_DOMAIN per deployment; it is shown in the login UI,
+ * so it is public by design.
  */
-export const ALLOWED_DOMAIN = "gorafeeq.com"
+export const ALLOWED_DOMAIN =
+  process.env.NEXT_PUBLIC_ALLOWED_DOMAIN ?? "example.com"
 
 /**
  * TEMPORARY PLACEHOLDER LOGIN (until IT provisions real Google OAuth).
  * A NextAuth Credentials provider (configured in auth.ts) accepts ANY
- * @gorafeeq.com email plus this shared password. It is intentionally NOT
+ * email on ALLOWED_DOMAIN plus this shared password. It is intentionally NOT
  * secure — it's a stand-in so the team can use the app and the login UX is
  * real. Swap to Google by filling AUTH_GOOGLE_ID / AUTH_GOOGLE_SECRET and
  * removing the credentials provider. See AUTH_SETUP.md.
  */
-export const DEV_LOGIN_PASSWORD = process.env.DEV_LOGIN_PASSWORD ?? "rafeeq"
+export const DEV_LOGIN_PASSWORD = process.env.DEV_LOGIN_PASSWORD ?? "clarity"
 
 /** True once real Google OAuth credentials exist. */
 export const GOOGLE_ENABLED = !!process.env.AUTH_GOOGLE_ID
@@ -44,7 +46,7 @@ export const authConfig = {
           Google({
             authorization: {
               params: {
-                // Restrict the Google account chooser to the gorafeeq.com
+                // Restrict the Google account chooser to the allowed
                 // workspace and always let the user pick which account to use.
                 hd: ALLOWED_DOMAIN,
                 prompt: "select_account",

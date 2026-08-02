@@ -10,7 +10,7 @@ from app.models.schemas import (
     AccuracyResponse, ClassificationWithMessage, ClassifyRequest, ClassifyResponse,
     MessageResponse, SentimentResultsResponse, TextClassificationResponse,
 )
-from app.services import bq_text as bq
+from app.services import db_text as bq
 from app.services.text_analytics_service import get_accuracy
 from app.services.text_classifier import classify_message
 from app.utils.helpers import utcnow_iso
@@ -39,7 +39,7 @@ async def classify(req: ClassifyRequest):
 
     messages = await bq.get_messages_by_ids(target_ids)
     msg_map = {m["message_id"]: m["content"] for m in messages}
-    model_version = settings.gemini_model
+    model_version = settings.gemini_classify_model
     classified, failed_ids = 0, []
 
     for i in range(0, len(target_ids), req.batch_size):
@@ -87,7 +87,7 @@ async def get_results(
     from_date: Optional[str] = Query(None),
     to_date: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=200),
+    page_size: int = Query(50, ge=1, le=1000),
 ):
     try:
         total, rows = await bq.query_classifications(
@@ -110,7 +110,8 @@ async def get_results(
         msg = MessageResponse(
             message_id=r["message_id"], customer_id=r.get("customer_id"), content=r["content"],
             source_channel=r["source_channel"], merchant_name=r.get("merchant_name"),
-            zone=r.get("zone"), created_at=str(r.get("msg_created_at", "")),
+            zone=r.get("zone"), vertical=r.get("vertical"),
+            created_at=str(r.get("msg_created_at", "")),
             ingested_at=str(r.get("msg_ingested_at", "")),
             closed_at=str(closed_at_raw) if closed_at_raw else None,
             agent_name=r.get("agent_name"),

@@ -41,11 +41,11 @@ def _synthetic_rows(n=6):
             "used_coupon": "SAVE10" if i == 0 else None,
             "payment_type": 2,
             "customer_device_type": "android",
-            "platform_name": "rafeeq_app",
+            "platform_name": "clarity_app",
             "cuisine": "burgers",
             "zone_name": "Doha",
             "customer_zone": "Doha",
-            "rafeeq_time_to_accept_order_min": 1.5,
+            "clarity_time_to_accept_order_min": 1.5,
             "vendor_to_accept_order_min": 2.0,
             "preparing_time_min": 12.0,
         })
@@ -137,9 +137,13 @@ class TestPredictorDegradation:
 
 
 class TestExplorationConfig:
-    def test_eight_exploration_functions(self):
+    def test_every_exploration_artifact_has_a_function(self):
         from app.services import cancellation_service as svc
-        assert len(svc.EXPLORATION_FUNCS) == 8
+        assert set(svc.EXPLORATION_FUNCS) == {
+            "cancellation_trend", "cancellation_by_merchant", "cancellation_by_zone",
+            "cancellation_by_time", "cancellation_by_dow", "cancellation_by_order_size",
+            "cancellation_by_actor", "cancellation_by_reason", "cancellation_crosstabs",
+        }
 
     def test_missing_artifact_loaders_return_none(self, tmp_path, monkeypatch):
         from app.services import cancellation_service as svc

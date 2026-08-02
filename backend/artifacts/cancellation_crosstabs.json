@@ -1,286 +1,1093 @@
 {
   "zone_x_time": [
     {
-      "zone_name": "Zone 16 Old Airport",
-      "time_bucket": "Morning",
-      "total_orders": 44396,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0
+      "zone_name": "Al Khor",
+      "time_bucket": "Afternoon",
+      "total_orders": 410,
+      "cancelled": 59,
+      "cancel_rate_pct": 14.39
     },
     {
-      "zone_name": "Zone 20 Al Sailiya and Industrial area",
+      "zone_name": "Al Khor",
       "time_bucket": "Dinner",
-      "total_orders": 26884,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0
+      "total_orders": 1223,
+      "cancelled": 171,
+      "cancel_rate_pct": 13.98
     },
     {
-      "zone_name": "Zone 17 Abu Hamour and Ain Khaled",
+      "zone_name": "Al Khor",
       "time_bucket": "Late Night",
-      "total_orders": 502618,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0
+      "total_orders": 518,
+      "cancelled": 87,
+      "cancel_rate_pct": 16.8
     },
     {
-      "zone_name": "Zone 5 Lusail and Pearl",
-      "time_bucket": "Morning",
-      "total_orders": 157752,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0
-    },
-    {
-      "zone_name": "Zone 19 Baaya and Al Aziziyah",
-      "time_bucket": "Afternoon",
-      "total_orders": 341659,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0
-    },
-    {
-      "zone_name": "Zone 5 Lusail and Pearl",
-      "time_bucket": "Late Night",
-      "total_orders": 398923,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0
-    },
-    {
-      "zone_name": "Zone 8 Gharrrafat Al Rayyan",
+      "zone_name": "Al Khor",
       "time_bucket": "Lunch",
-      "total_orders": 211200,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0
+      "total_orders": 702,
+      "cancelled": 99,
+      "cancel_rate_pct": 14.1
     },
     {
-      "zone_name": "Zone 14 Al Souq and Old Doha",
-      "time_bucket": "Afternoon",
-      "total_orders": 46151,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0
-    },
-    {
-      "zone_name": "Zone 14 Al Souq and Old Doha",
-      "time_bucket": "Lunch",
-      "total_orders": 41453,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0
-    },
-    {
-      "zone_name": "Zone 12 Fereej bin Omran",
-      "time_bucket": "Afternoon",
-      "total_orders": 74881,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0
-    },
-    {
-      "zone_name": "Zone 20 Al Sailiya and Industrial area",
-      "time_bucket": "Late Night",
-      "total_orders": 36350,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0
-    },
-    {
-      "zone_name": "Zone 13 Al Sadd",
-      "time_bucket": "Afternoon",
-      "total_orders": 150479,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0
-    },
-    {
-      "zone_name": "Zone 4 Umm Salal Ali",
-      "time_bucket": "Afternoon",
-      "total_orders": 43830,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0
-    },
-    {
-      "zone_name": "Zone 9 Mall of Qatar and Bani Hajer",
-      "time_bucket": "Afternoon",
-      "total_orders": 57528,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0
-    },
-    {
-      "zone_name": "Zone 8 Gharrrafat Al Rayyan",
-      "time_bucket": "Late Night",
-      "total_orders": 407496,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0
-    },
-    {
-      "zone_name": "Zone 21 Al Wakrah",
-      "time_bucket": "Afternoon",
-      "total_orders": 129826,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0
-    },
-    {
-      "zone_name": "Zone 15 Al Muntazah and Hilal",
+      "zone_name": "Al Khor",
       "time_bucket": "Morning",
-      "total_orders": 60276,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0
+      "total_orders": 382,
+      "cancelled": 49,
+      "cancel_rate_pct": 12.83
     },
     {
-      "zone_name": "Zone 10 Al Duhail",
+      "zone_name": "Umm Salal",
       "time_bucket": "Afternoon",
-      "total_orders": 260018,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0
+      "total_orders": 389,
+      "cancelled": 45,
+      "cancel_rate_pct": 11.57
     },
     {
-      "zone_name": "Zone 2 Al Khor",
+      "zone_name": "Umm Salal",
       "time_bucket": "Dinner",
-      "total_orders": 284977,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0
+      "total_orders": 1262,
+      "cancelled": 164,
+      "cancel_rate_pct": 13.0
     },
     {
-      "zone_name": "Zone 15 Al Muntazah and Hilal",
+      "zone_name": "Umm Salal",
       "time_bucket": "Late Night",
-      "total_orders": 192223,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0
+      "total_orders": 509,
+      "cancelled": 71,
+      "cancel_rate_pct": 13.95
+    },
+    {
+      "zone_name": "Umm Salal",
+      "time_bucket": "Lunch",
+      "total_orders": 691,
+      "cancelled": 74,
+      "cancel_rate_pct": 10.71
+    },
+    {
+      "zone_name": "Umm Salal",
+      "time_bucket": "Morning",
+      "total_orders": 371,
+      "cancelled": 55,
+      "cancel_rate_pct": 14.82
+    },
+    {
+      "zone_name": "Al Wakrah",
+      "time_bucket": "Afternoon",
+      "total_orders": 403,
+      "cancelled": 39,
+      "cancel_rate_pct": 9.68
+    },
+    {
+      "zone_name": "Al Wakrah",
+      "time_bucket": "Dinner",
+      "total_orders": 1159,
+      "cancelled": 130,
+      "cancel_rate_pct": 11.22
+    },
+    {
+      "zone_name": "Al Wakrah",
+      "time_bucket": "Late Night",
+      "total_orders": 487,
+      "cancelled": 78,
+      "cancel_rate_pct": 16.02
+    },
+    {
+      "zone_name": "Al Wakrah",
+      "time_bucket": "Lunch",
+      "total_orders": 667,
+      "cancelled": 75,
+      "cancel_rate_pct": 11.24
+    },
+    {
+      "zone_name": "Al Wakrah",
+      "time_bucket": "Morning",
+      "total_orders": 426,
+      "cancelled": 51,
+      "cancel_rate_pct": 11.97
+    },
+    {
+      "zone_name": "Muaither",
+      "time_bucket": "Afternoon",
+      "total_orders": 412,
+      "cancelled": 35,
+      "cancel_rate_pct": 8.5
+    },
+    {
+      "zone_name": "Muaither",
+      "time_bucket": "Dinner",
+      "total_orders": 1233,
+      "cancelled": 123,
+      "cancel_rate_pct": 9.98
+    },
+    {
+      "zone_name": "Muaither",
+      "time_bucket": "Late Night",
+      "total_orders": 562,
+      "cancelled": 82,
+      "cancel_rate_pct": 14.59
+    },
+    {
+      "zone_name": "Muaither",
+      "time_bucket": "Lunch",
+      "total_orders": 641,
+      "cancelled": 59,
+      "cancel_rate_pct": 9.2
+    },
+    {
+      "zone_name": "Muaither",
+      "time_bucket": "Morning",
+      "total_orders": 409,
+      "cancelled": 40,
+      "cancel_rate_pct": 9.78
+    },
+    {
+      "zone_name": "Education City",
+      "time_bucket": "Afternoon",
+      "total_orders": 405,
+      "cancelled": 36,
+      "cancel_rate_pct": 8.89
+    },
+    {
+      "zone_name": "Education City",
+      "time_bucket": "Dinner",
+      "total_orders": 1194,
+      "cancelled": 108,
+      "cancel_rate_pct": 9.05
+    },
+    {
+      "zone_name": "Education City",
+      "time_bucket": "Late Night",
+      "total_orders": 513,
+      "cancelled": 66,
+      "cancel_rate_pct": 12.87
+    },
+    {
+      "zone_name": "Education City",
+      "time_bucket": "Lunch",
+      "total_orders": 716,
+      "cancelled": 77,
+      "cancel_rate_pct": 10.75
+    },
+    {
+      "zone_name": "Education City",
+      "time_bucket": "Morning",
+      "total_orders": 398,
+      "cancelled": 37,
+      "cancel_rate_pct": 9.3
+    },
+    {
+      "zone_name": "Al Waab",
+      "time_bucket": "Afternoon",
+      "total_orders": 371,
+      "cancelled": 24,
+      "cancel_rate_pct": 6.47
+    },
+    {
+      "zone_name": "Al Waab",
+      "time_bucket": "Dinner",
+      "total_orders": 1259,
+      "cancelled": 111,
+      "cancel_rate_pct": 8.82
+    },
+    {
+      "zone_name": "Al Waab",
+      "time_bucket": "Late Night",
+      "total_orders": 520,
+      "cancelled": 61,
+      "cancel_rate_pct": 11.73
+    },
+    {
+      "zone_name": "Al Waab",
+      "time_bucket": "Lunch",
+      "total_orders": 722,
+      "cancelled": 63,
+      "cancel_rate_pct": 8.73
+    },
+    {
+      "zone_name": "Al Waab",
+      "time_bucket": "Morning",
+      "total_orders": 392,
+      "cancelled": 36,
+      "cancel_rate_pct": 9.18
     }
   ],
   "merchant_x_dow": [
     {
-      "restaurant_name": "TIKKA BY EAT974",
+      "restaurant_name": "Shawarma Time",
+      "day_of_week": "Friday",
+      "total_orders": 192,
+      "cancelled": 41,
+      "cancel_rate_pct": 21.35
+    },
+    {
+      "restaurant_name": "Naseem Al Rabeeh",
+      "day_of_week": "Friday",
+      "total_orders": 182,
+      "cancelled": 36,
+      "cancel_rate_pct": 19.78
+    },
+    {
+      "restaurant_name": "Kulud Pharmacy",
+      "day_of_week": "Friday",
+      "total_orders": 182,
+      "cancelled": 31,
+      "cancel_rate_pct": 17.03
+    },
+    {
+      "restaurant_name": "Turkey Central",
+      "day_of_week": "Friday",
+      "total_orders": 154,
+      "cancelled": 30,
+      "cancel_rate_pct": 19.48
+    },
+    {
+      "restaurant_name": "Wrap It Up",
+      "day_of_week": "Friday",
+      "total_orders": 172,
+      "cancelled": 30,
+      "cancel_rate_pct": 17.44
+    },
+    {
+      "restaurant_name": "Pet Planet",
       "day_of_week": "Monday",
-      "total_orders": 1379,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0
+      "total_orders": 136,
+      "cancelled": 23,
+      "cancel_rate_pct": 16.91
     },
     {
-      "restaurant_name": "SMOOTHIE PANDA",
-      "day_of_week": "Tuesday",
-      "total_orders": 466,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0
-    },
-    {
-      "restaurant_name": "ROOST",
+      "restaurant_name": "Wellcare Pharmacy",
       "day_of_week": "Monday",
-      "total_orders": 4839,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0
+      "total_orders": 154,
+      "cancelled": 21,
+      "cancel_rate_pct": 13.64
     },
     {
-      "restaurant_name": "MUTABBAQ & KUNAFA",
+      "restaurant_name": "Shawarma Time",
       "day_of_week": "Monday",
-      "total_orders": 2976,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0
+      "total_orders": 126,
+      "cancelled": 20,
+      "cancel_rate_pct": 15.87
     },
     {
-      "restaurant_name": "SHAKE  SHACK",
-      "day_of_week": "Tuesday",
-      "total_orders": 1123,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0
-    },
-    {
-      "restaurant_name": "THEJAJA RESTAURANT",
+      "restaurant_name": "Wrap It Up",
       "day_of_week": "Monday",
-      "total_orders": 3833,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0
+      "total_orders": 130,
+      "cancelled": 19,
+      "cancel_rate_pct": 14.62
     },
     {
-      "restaurant_name": "NANDOS",
-      "day_of_week": "Tuesday",
-      "total_orders": 8951,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0
-    },
-    {
-      "restaurant_name": "PF CHANGS",
-      "day_of_week": "Tuesday",
-      "total_orders": 2467,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0
-    },
-    {
-      "restaurant_name": "CAJUN",
+      "restaurant_name": "Damascus Gate",
       "day_of_week": "Monday",
-      "total_orders": 17053,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0
+      "total_orders": 144,
+      "cancelled": 17,
+      "cancel_rate_pct": 11.81
     },
     {
-      "restaurant_name": "ABN EAMI RESTAURANT",
-      "day_of_week": "Tuesday",
-      "total_orders": 744,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0
-    },
-    {
-      "restaurant_name": "WOODEN BAKERY",
-      "day_of_week": "Monday",
-      "total_orders": 6191,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0
-    },
-    {
-      "restaurant_name": "RAFEEQ KIDZONE",
+      "restaurant_name": "Damascus Gate",
       "day_of_week": "Saturday",
-      "total_orders": 1113,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0
+      "total_orders": 162,
+      "cancelled": 35,
+      "cancel_rate_pct": 21.6
     },
     {
-      "restaurant_name": "SOGHAAT SWEET AND BAKERS",
+      "restaurant_name": "Bait Al Mandi",
       "day_of_week": "Saturday",
-      "total_orders": 1018,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0
+      "total_orders": 194,
+      "cancelled": 34,
+      "cancel_rate_pct": 17.53
     },
     {
-      "restaurant_name": "MANGO TALAAT",
-      "day_of_week": "Monday",
-      "total_orders": 7077,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0
-    },
-    {
-      "restaurant_name": "GO CRISPY",
-      "day_of_week": "Tuesday",
-      "total_orders": 58094,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0
-    },
-    {
-      "restaurant_name": "MUTABBAQ & SAJ",
+      "restaurant_name": "Vitamin Hub",
       "day_of_week": "Saturday",
-      "total_orders": 11352,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0
+      "total_orders": 160,
+      "cancelled": 33,
+      "cancel_rate_pct": 20.63
     },
     {
-      "restaurant_name": "FORSAN ALZUBARAH KITCHEN",
+      "restaurant_name": "Golden Wok",
       "day_of_week": "Saturday",
-      "total_orders": 418,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0
+      "total_orders": 160,
+      "cancelled": 32,
+      "cancel_rate_pct": 20.0
     },
     {
-      "restaurant_name": "SABAH W MASA",
+      "restaurant_name": "Shawarma Time",
+      "day_of_week": "Saturday",
+      "total_orders": 181,
+      "cancelled": 32,
+      "cancel_rate_pct": 17.68
+    },
+    {
+      "restaurant_name": "Golden Wok",
+      "day_of_week": "Sunday",
+      "total_orders": 123,
+      "cancelled": 19,
+      "cancel_rate_pct": 15.45
+    },
+    {
+      "restaurant_name": "Dana Mini Mart",
+      "day_of_week": "Sunday",
+      "total_orders": 134,
+      "cancelled": 17,
+      "cancel_rate_pct": 12.69
+    },
+    {
+      "restaurant_name": "LuLu Hypermarket",
+      "day_of_week": "Sunday",
+      "total_orders": 126,
+      "cancelled": 17,
+      "cancel_rate_pct": 13.49
+    },
+    {
+      "restaurant_name": "Pizza Nabil",
+      "day_of_week": "Sunday",
+      "total_orders": 153,
+      "cancelled": 17,
+      "cancel_rate_pct": 11.11
+    },
+    {
+      "restaurant_name": "Shawarma Time",
+      "day_of_week": "Sunday",
+      "total_orders": 140,
+      "cancelled": 17,
+      "cancel_rate_pct": 12.14
+    },
+    {
+      "restaurant_name": "Damascus Gate",
+      "day_of_week": "Thursday",
+      "total_orders": 155,
+      "cancelled": 24,
+      "cancel_rate_pct": 15.48
+    },
+    {
+      "restaurant_name": "Naseem Al Rabeeh",
+      "day_of_week": "Thursday",
+      "total_orders": 176,
+      "cancelled": 24,
+      "cancel_rate_pct": 13.64
+    },
+    {
+      "restaurant_name": "Bait Al Mandi",
+      "day_of_week": "Thursday",
+      "total_orders": 172,
+      "cancelled": 23,
+      "cancel_rate_pct": 13.37
+    },
+    {
+      "restaurant_name": "Sushi Yard",
+      "day_of_week": "Thursday",
+      "total_orders": 181,
+      "cancelled": 22,
+      "cancel_rate_pct": 12.15
+    },
+    {
+      "restaurant_name": "Quick Basket",
+      "day_of_week": "Thursday",
+      "total_orders": 173,
+      "cancelled": 20,
+      "cancel_rate_pct": 11.56
+    },
+    {
+      "restaurant_name": "Naseem Al Rabeeh",
       "day_of_week": "Tuesday",
-      "total_orders": 5089,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0
+      "total_orders": 152,
+      "cancelled": 23,
+      "cancel_rate_pct": 15.13
     },
     {
-      "restaurant_name": "RAYAHEEN AL SHAM",
+      "restaurant_name": "Vitamin Hub",
       "day_of_week": "Tuesday",
-      "total_orders": 1074,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0
+      "total_orders": 159,
+      "cancelled": 23,
+      "cancel_rate_pct": 14.47
     },
     {
-      "restaurant_name": "AL MAJLES AL ARABI",
-      "day_of_week": "Monday",
-      "total_orders": 856,
-      "cancelled": 0,
-      "cancel_rate_pct": 0.0
+      "restaurant_name": "Burger Boutique",
+      "day_of_week": "Tuesday",
+      "total_orders": 134,
+      "cancelled": 22,
+      "cancel_rate_pct": 16.42
+    },
+    {
+      "restaurant_name": "Bait Al Mandi",
+      "day_of_week": "Tuesday",
+      "total_orders": 159,
+      "cancelled": 19,
+      "cancel_rate_pct": 11.95
+    },
+    {
+      "restaurant_name": "Shawarma Time",
+      "day_of_week": "Tuesday",
+      "total_orders": 141,
+      "cancelled": 18,
+      "cancel_rate_pct": 12.77
+    },
+    {
+      "restaurant_name": "Naseem Al Rabeeh",
+      "day_of_week": "Wednesday",
+      "total_orders": 138,
+      "cancelled": 23,
+      "cancel_rate_pct": 16.67
+    },
+    {
+      "restaurant_name": "Burger Boutique",
+      "day_of_week": "Wednesday",
+      "total_orders": 151,
+      "cancelled": 19,
+      "cancel_rate_pct": 12.58
+    },
+    {
+      "restaurant_name": "Tandoori Nights",
+      "day_of_week": "Wednesday",
+      "total_orders": 124,
+      "cancelled": 19,
+      "cancel_rate_pct": 15.32
+    },
+    {
+      "restaurant_name": "Green Farm Market",
+      "day_of_week": "Wednesday",
+      "total_orders": 133,
+      "cancelled": 17,
+      "cancel_rate_pct": 12.78
+    },
+    {
+      "restaurant_name": "Layali Beirut",
+      "day_of_week": "Wednesday",
+      "total_orders": 147,
+      "cancelled": 17,
+      "cancel_rate_pct": 11.56
+    }
+  ],
+  "merchant_x_zone": [
+    {
+      "restaurant_name": "Damascus Gate",
+      "zone_name": "Ain Khaled",
+      "total_orders": 62,
+      "cancelled": 10,
+      "cancel_rate_pct": 16.13
+    },
+    {
+      "restaurant_name": "Golden Wok",
+      "zone_name": "Ain Khaled",
+      "total_orders": 74,
+      "cancelled": 10,
+      "cancel_rate_pct": 13.51
+    },
+    {
+      "restaurant_name": "Al Aker Sweets",
+      "zone_name": "Ain Khaled",
+      "total_orders": 65,
+      "cancelled": 9,
+      "cancel_rate_pct": 13.85
+    },
+    {
+      "restaurant_name": "Doha Event Supplies",
+      "zone_name": "Ain Khaled",
+      "total_orders": 73,
+      "cancelled": 9,
+      "cancel_rate_pct": 12.33
+    },
+    {
+      "restaurant_name": "Glow Salon",
+      "zone_name": "Ain Khaled",
+      "total_orders": 63,
+      "cancelled": 9,
+      "cancel_rate_pct": 14.29
+    },
+    {
+      "restaurant_name": "Shawarma Time",
+      "zone_name": "Al Gharrafa",
+      "total_orders": 66,
+      "cancelled": 12,
+      "cancel_rate_pct": 18.18
+    },
+    {
+      "restaurant_name": "Barber Lounge",
+      "zone_name": "Al Gharrafa",
+      "total_orders": 64,
+      "cancelled": 11,
+      "cancel_rate_pct": 17.19
+    },
+    {
+      "restaurant_name": "Wrap It Up",
+      "zone_name": "Al Gharrafa",
+      "total_orders": 52,
+      "cancelled": 10,
+      "cancel_rate_pct": 19.23
+    },
+    {
+      "restaurant_name": "Layali Beirut",
+      "zone_name": "Al Gharrafa",
+      "total_orders": 70,
+      "cancelled": 8,
+      "cancel_rate_pct": 11.43
+    },
+    {
+      "restaurant_name": "LuLu Hypermarket",
+      "zone_name": "Al Gharrafa",
+      "total_orders": 58,
+      "cancelled": 8,
+      "cancel_rate_pct": 13.79
+    },
+    {
+      "restaurant_name": "Dana Mini Mart",
+      "zone_name": "Al Khor",
+      "total_orders": 66,
+      "cancelled": 15,
+      "cancel_rate_pct": 22.73
+    },
+    {
+      "restaurant_name": "Shawarma Time",
+      "zone_name": "Al Khor",
+      "total_orders": 66,
+      "cancelled": 15,
+      "cancel_rate_pct": 22.73
+    },
+    {
+      "restaurant_name": "Sushi Yard",
+      "zone_name": "Al Khor",
+      "total_orders": 60,
+      "cancelled": 15,
+      "cancel_rate_pct": 25.0
+    },
+    {
+      "restaurant_name": "Quick Basket",
+      "zone_name": "Al Khor",
+      "total_orders": 62,
+      "cancelled": 14,
+      "cancel_rate_pct": 22.58
+    },
+    {
+      "restaurant_name": "Wrap It Up",
+      "zone_name": "Al Khor",
+      "total_orders": 69,
+      "cancelled": 14,
+      "cancel_rate_pct": 20.29
+    },
+    {
+      "restaurant_name": "Pet Planet",
+      "zone_name": "Al Rayyan",
+      "total_orders": 58,
+      "cancelled": 11,
+      "cancel_rate_pct": 18.97
+    },
+    {
+      "restaurant_name": "Sushi Yard",
+      "zone_name": "Al Rayyan",
+      "total_orders": 56,
+      "cancelled": 11,
+      "cancel_rate_pct": 19.64
+    },
+    {
+      "restaurant_name": "Tandoori Nights",
+      "zone_name": "Al Rayyan",
+      "total_orders": 63,
+      "cancelled": 11,
+      "cancel_rate_pct": 17.46
+    },
+    {
+      "restaurant_name": "Kulud Pharmacy",
+      "zone_name": "Al Rayyan",
+      "total_orders": 59,
+      "cancelled": 9,
+      "cancel_rate_pct": 15.25
+    },
+    {
+      "restaurant_name": "Outlet Bazaar",
+      "zone_name": "Al Rayyan",
+      "total_orders": 65,
+      "cancelled": 9,
+      "cancel_rate_pct": 13.85
+    },
+    {
+      "restaurant_name": "Layali Beirut",
+      "zone_name": "Al Sadd",
+      "total_orders": 71,
+      "cancelled": 13,
+      "cancel_rate_pct": 18.31
+    },
+    {
+      "restaurant_name": "Vitamin Hub",
+      "zone_name": "Al Sadd",
+      "total_orders": 56,
+      "cancelled": 11,
+      "cancel_rate_pct": 19.64
+    },
+    {
+      "restaurant_name": "Turkey Central",
+      "zone_name": "Al Sadd",
+      "total_orders": 63,
+      "cancelled": 9,
+      "cancel_rate_pct": 14.29
+    },
+    {
+      "restaurant_name": "Quick Basket",
+      "zone_name": "Al Sadd",
+      "total_orders": 56,
+      "cancelled": 8,
+      "cancel_rate_pct": 14.29
+    },
+    {
+      "restaurant_name": "Shawarma Time",
+      "zone_name": "Al Sadd",
+      "total_orders": 59,
+      "cancelled": 8,
+      "cancel_rate_pct": 13.56
+    },
+    {
+      "restaurant_name": "Dana Mini Mart",
+      "zone_name": "Al Thumama",
+      "total_orders": 69,
+      "cancelled": 14,
+      "cancel_rate_pct": 20.29
+    },
+    {
+      "restaurant_name": "Naseem Al Rabeeh",
+      "zone_name": "Al Thumama",
+      "total_orders": 71,
+      "cancelled": 14,
+      "cancel_rate_pct": 19.72
+    },
+    {
+      "restaurant_name": "Wrap It Up",
+      "zone_name": "Al Thumama",
+      "total_orders": 60,
+      "cancelled": 11,
+      "cancel_rate_pct": 18.33
+    },
+    {
+      "restaurant_name": "Wellcare Pharmacy",
+      "zone_name": "Al Thumama",
+      "total_orders": 60,
+      "cancelled": 9,
+      "cancel_rate_pct": 15.0
+    },
+    {
+      "restaurant_name": "Shawarma Time",
+      "zone_name": "Al Thumama",
+      "total_orders": 59,
+      "cancelled": 8,
+      "cancel_rate_pct": 13.56
+    },
+    {
+      "restaurant_name": "Bait Al Mandi",
+      "zone_name": "Al Waab",
+      "total_orders": 58,
+      "cancelled": 11,
+      "cancel_rate_pct": 18.97
+    },
+    {
+      "restaurant_name": "LuLu Hypermarket",
+      "zone_name": "Al Waab",
+      "total_orders": 54,
+      "cancelled": 11,
+      "cancel_rate_pct": 20.37
+    },
+    {
+      "restaurant_name": "Outlet Bazaar",
+      "zone_name": "Al Waab",
+      "total_orders": 55,
+      "cancelled": 11,
+      "cancel_rate_pct": 20.0
+    },
+    {
+      "restaurant_name": "Tandoori Nights",
+      "zone_name": "Al Waab",
+      "total_orders": 73,
+      "cancelled": 10,
+      "cancel_rate_pct": 13.7
+    },
+    {
+      "restaurant_name": "Layali Beirut",
+      "zone_name": "Al Waab",
+      "total_orders": 53,
+      "cancelled": 9,
+      "cancel_rate_pct": 16.98
+    },
+    {
+      "restaurant_name": "Golden Wok",
+      "zone_name": "Al Wakrah",
+      "total_orders": 68,
+      "cancelled": 16,
+      "cancel_rate_pct": 23.53
+    },
+    {
+      "restaurant_name": "Wrap It Up",
+      "zone_name": "Al Wakrah",
+      "total_orders": 61,
+      "cancelled": 15,
+      "cancel_rate_pct": 24.59
+    },
+    {
+      "restaurant_name": "Naseem Al Rabeeh",
+      "zone_name": "Al Wakrah",
+      "total_orders": 65,
+      "cancelled": 14,
+      "cancel_rate_pct": 21.54
+    },
+    {
+      "restaurant_name": "Vitamin Hub",
+      "zone_name": "Al Wakrah",
+      "total_orders": 51,
+      "cancelled": 14,
+      "cancel_rate_pct": 27.45
+    },
+    {
+      "restaurant_name": "Burger Boutique",
+      "zone_name": "Al Wakrah",
+      "total_orders": 68,
+      "cancelled": 11,
+      "cancel_rate_pct": 16.18
+    },
+    {
+      "restaurant_name": "Shawarma Time",
+      "zone_name": "Bin Mahmoud",
+      "total_orders": 74,
+      "cancelled": 12,
+      "cancel_rate_pct": 16.22
+    },
+    {
+      "restaurant_name": "Bait Al Mandi",
+      "zone_name": "Bin Mahmoud",
+      "total_orders": 74,
+      "cancelled": 9,
+      "cancel_rate_pct": 12.16
+    },
+    {
+      "restaurant_name": "Burger Boutique",
+      "zone_name": "Bin Mahmoud",
+      "total_orders": 54,
+      "cancelled": 9,
+      "cancel_rate_pct": 16.67
+    },
+    {
+      "restaurant_name": "Golden Wok",
+      "zone_name": "Bin Mahmoud",
+      "total_orders": 50,
+      "cancelled": 9,
+      "cancel_rate_pct": 18.0
+    },
+    {
+      "restaurant_name": "Damascus Gate",
+      "zone_name": "Bin Mahmoud",
+      "total_orders": 54,
+      "cancelled": 8,
+      "cancel_rate_pct": 14.81
+    },
+    {
+      "restaurant_name": "Bait Al Mandi",
+      "zone_name": "Duhail",
+      "total_orders": 50,
+      "cancelled": 9,
+      "cancel_rate_pct": 18.0
+    },
+    {
+      "restaurant_name": "LuLu Hypermarket",
+      "zone_name": "Duhail",
+      "total_orders": 66,
+      "cancelled": 9,
+      "cancel_rate_pct": 13.64
+    },
+    {
+      "restaurant_name": "Naseem Al Rabeeh",
+      "zone_name": "Duhail",
+      "total_orders": 69,
+      "cancelled": 9,
+      "cancel_rate_pct": 13.04
+    },
+    {
+      "restaurant_name": "Damascus Gate",
+      "zone_name": "Duhail",
+      "total_orders": 57,
+      "cancelled": 8,
+      "cancel_rate_pct": 14.04
+    },
+    {
+      "restaurant_name": "Glow Salon",
+      "zone_name": "Duhail",
+      "total_orders": 82,
+      "cancelled": 8,
+      "cancel_rate_pct": 9.76
+    },
+    {
+      "restaurant_name": "Naseem Al Rabeeh",
+      "zone_name": "Education City",
+      "total_orders": 60,
+      "cancelled": 12,
+      "cancel_rate_pct": 20.0
+    },
+    {
+      "restaurant_name": "Turkey Central",
+      "zone_name": "Education City",
+      "total_orders": 57,
+      "cancelled": 12,
+      "cancel_rate_pct": 21.05
+    },
+    {
+      "restaurant_name": "Damascus Gate",
+      "zone_name": "Education City",
+      "total_orders": 59,
+      "cancelled": 10,
+      "cancel_rate_pct": 16.95
+    },
+    {
+      "restaurant_name": "Kulud Pharmacy",
+      "zone_name": "Education City",
+      "total_orders": 60,
+      "cancelled": 10,
+      "cancel_rate_pct": 16.67
+    },
+    {
+      "restaurant_name": "Shawarma Time",
+      "zone_name": "Education City",
+      "total_orders": 60,
+      "cancelled": 10,
+      "cancel_rate_pct": 16.67
+    },
+    {
+      "restaurant_name": "Bait Al Mandi",
+      "zone_name": "Lusail",
+      "total_orders": 61,
+      "cancelled": 14,
+      "cancel_rate_pct": 22.95
+    },
+    {
+      "restaurant_name": "Shawarma Time",
+      "zone_name": "Lusail",
+      "total_orders": 52,
+      "cancelled": 13,
+      "cancel_rate_pct": 25.0
+    },
+    {
+      "restaurant_name": "Turkey Central",
+      "zone_name": "Lusail",
+      "total_orders": 63,
+      "cancelled": 13,
+      "cancel_rate_pct": 20.63
+    },
+    {
+      "restaurant_name": "Layali Beirut",
+      "zone_name": "Lusail",
+      "total_orders": 59,
+      "cancelled": 11,
+      "cancel_rate_pct": 18.64
+    },
+    {
+      "restaurant_name": "Naseem Al Rabeeh",
+      "zone_name": "Lusail",
+      "total_orders": 72,
+      "cancelled": 10,
+      "cancel_rate_pct": 13.89
+    },
+    {
+      "restaurant_name": "Wrap It Up",
+      "zone_name": "Msheireb",
+      "total_orders": 67,
+      "cancelled": 10,
+      "cancel_rate_pct": 14.93
+    },
+    {
+      "restaurant_name": "Wellcare Pharmacy",
+      "zone_name": "Msheireb",
+      "total_orders": 68,
+      "cancelled": 9,
+      "cancel_rate_pct": 13.24
+    },
+    {
+      "restaurant_name": "Dana Mini Mart",
+      "zone_name": "Msheireb",
+      "total_orders": 72,
+      "cancelled": 8,
+      "cancel_rate_pct": 11.11
+    },
+    {
+      "restaurant_name": "Al Meera Express",
+      "zone_name": "Msheireb",
+      "total_orders": 67,
+      "cancelled": 7,
+      "cancel_rate_pct": 10.45
+    },
+    {
+      "restaurant_name": "Burger Boutique",
+      "zone_name": "Msheireb",
+      "total_orders": 63,
+      "cancelled": 7,
+      "cancel_rate_pct": 11.11
+    },
+    {
+      "restaurant_name": "Wellcare Pharmacy",
+      "zone_name": "Muaither",
+      "total_orders": 78,
+      "cancelled": 16,
+      "cancel_rate_pct": 20.51
+    },
+    {
+      "restaurant_name": "Bait Al Mandi",
+      "zone_name": "Muaither",
+      "total_orders": 70,
+      "cancelled": 13,
+      "cancel_rate_pct": 18.57
+    },
+    {
+      "restaurant_name": "Pet Planet",
+      "zone_name": "Muaither",
+      "total_orders": 62,
+      "cancelled": 12,
+      "cancel_rate_pct": 19.35
+    },
+    {
+      "restaurant_name": "Turkey Central",
+      "zone_name": "Muaither",
+      "total_orders": 74,
+      "cancelled": 11,
+      "cancel_rate_pct": 14.86
+    },
+    {
+      "restaurant_name": "Damascus Gate",
+      "zone_name": "Muaither",
+      "total_orders": 66,
+      "cancelled": 10,
+      "cancel_rate_pct": 15.15
+    },
+    {
+      "restaurant_name": "Vitamin Hub",
+      "zone_name": "Old Airport",
+      "total_orders": 72,
+      "cancelled": 16,
+      "cancel_rate_pct": 22.22
+    },
+    {
+      "restaurant_name": "Naseem Al Rabeeh",
+      "zone_name": "Old Airport",
+      "total_orders": 86,
+      "cancelled": 13,
+      "cancel_rate_pct": 15.12
+    },
+    {
+      "restaurant_name": "Shawarma Time",
+      "zone_name": "Old Airport",
+      "total_orders": 57,
+      "cancelled": 13,
+      "cancel_rate_pct": 22.81
+    },
+    {
+      "restaurant_name": "LuLu Hypermarket",
+      "zone_name": "Old Airport",
+      "total_orders": 60,
+      "cancelled": 11,
+      "cancel_rate_pct": 18.33
+    },
+    {
+      "restaurant_name": "Wrap It Up",
+      "zone_name": "Old Airport",
+      "total_orders": 53,
+      "cancelled": 11,
+      "cancel_rate_pct": 20.75
+    },
+    {
+      "restaurant_name": "Shawarma Time",
+      "zone_name": "The Pearl",
+      "total_orders": 60,
+      "cancelled": 8,
+      "cancel_rate_pct": 13.33
+    },
+    {
+      "restaurant_name": "Sushi Yard",
+      "zone_name": "The Pearl",
+      "total_orders": 52,
+      "cancelled": 8,
+      "cancel_rate_pct": 15.38
+    },
+    {
+      "restaurant_name": "Layali Beirut",
+      "zone_name": "The Pearl",
+      "total_orders": 64,
+      "cancelled": 7,
+      "cancel_rate_pct": 10.94
+    },
+    {
+      "restaurant_name": "Doha Event Supplies",
+      "zone_name": "The Pearl",
+      "total_orders": 66,
+      "cancelled": 6,
+      "cancel_rate_pct": 9.09
+    },
+    {
+      "restaurant_name": "Ehsan Food Bank",
+      "zone_name": "The Pearl",
+      "total_orders": 59,
+      "cancelled": 6,
+      "cancel_rate_pct": 10.17
+    },
+    {
+      "restaurant_name": "Golden Wok",
+      "zone_name": "Umm Salal",
+      "total_orders": 58,
+      "cancelled": 15,
+      "cancel_rate_pct": 25.86
+    },
+    {
+      "restaurant_name": "Damascus Gate",
+      "zone_name": "Umm Salal",
+      "total_orders": 58,
+      "cancelled": 14,
+      "cancel_rate_pct": 24.14
+    },
+    {
+      "restaurant_name": "Outlet Bazaar",
+      "zone_name": "Umm Salal",
+      "total_orders": 65,
+      "cancelled": 14,
+      "cancel_rate_pct": 21.54
+    },
+    {
+      "restaurant_name": "Nasi Lemak Qatar",
+      "zone_name": "Umm Salal",
+      "total_orders": 57,
+      "cancelled": 13,
+      "cancel_rate_pct": 22.81
+    },
+    {
+      "restaurant_name": "Vitamin Hub",
+      "zone_name": "Umm Salal",
+      "total_orders": 60,
+      "cancelled": 12,
+      "cancel_rate_pct": 20.0
+    },
+    {
+      "restaurant_name": "Clarity Courier",
+      "zone_name": "West Bay",
+      "total_orders": 65,
+      "cancelled": 12,
+      "cancel_rate_pct": 18.46
+    },
+    {
+      "restaurant_name": "Pizza Nabil",
+      "zone_name": "West Bay",
+      "total_orders": 60,
+      "cancelled": 8,
+      "cancel_rate_pct": 13.33
+    },
+    {
+      "restaurant_name": "Burger Boutique",
+      "zone_name": "West Bay",
+      "total_orders": 46,
+      "cancelled": 7,
+      "cancel_rate_pct": 15.22
+    },
+    {
+      "restaurant_name": "Kulud Pharmacy",
+      "zone_name": "West Bay",
+      "total_orders": 53,
+      "cancelled": 7,
+      "cancel_rate_pct": 13.21
+    },
+    {
+      "restaurant_name": "Quick Basket",
+      "zone_name": "West Bay",
+      "total_orders": 52,
+      "cancelled": 7,
+      "cancel_rate_pct": 13.46
     }
   ]
 }

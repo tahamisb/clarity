@@ -2,13 +2,10 @@
 Cancellation predictor — model loading, inference, SHAP explanations, and
 Gemini-enhanced analysis.
 
-The ML model + feature pipeline are produced by `scripts/train_cancellation_model.py`
-and loaded lazily from `artifacts/`. Gemini is reused via `gemini_service.call_with_retry`
-(JSON mode) to turn a numeric prediction + SHAP factors into a plain-language
-explanation and a recommended action.
-
-If the model artifacts are absent (model not trained yet), the service degrades
-gracefully — endpoints return a clear "model unavailable" signal rather than 500s.
+The ML model + feature pipeline are loaded lazily from `artifacts/` when present.
+They aren't shipped with the local dataset, so scoring falls back to the Gemini
+engine — and the warehouse pre-seeds a prediction for every live order, so the
+risk queue serves entirely from `cancellation_predictions` without any LLM calls.
 """
 
 from __future__ import annotations
@@ -27,12 +24,13 @@ warnings.filterwarnings("ignore", message=r".*pkg_resources is deprecated.*", ca
 import numpy as np
 import pandas as pd
 
-from app.config import get_settings
-from app.services.bq_client import get_client
 import re
 
-from app.services import bq_predictions
+from app.services import db_predictions
+from app.services import local_db as db
+from app.services.local_db import countif, safe_divide
 from app.services.gemini_service import call_with_retry
+from app.services.ttl_cache import ttl_cache
 from app.utils import feature_engineering as fe
 from app.utils.helpers import extract_json, strip_markdown_fences, utcnow_iso
 
@@ -49,7 +47,7 @@ _TOP_FACTORS = 6
 # Cap NEW Gemini scorings per live-queue request so the endpoint can't hang on a
 # cold cache (50 LLM calls). Cached predictions are always returned in full;
 # uncached ones fill in across loads.
-_GEMINI_QUEUE_MAX_NEW = 20
+_GEMINI_QUEUE_MAX_NEW = 500  # ponytail: 500 concurrent Gemini calls per load; lower if you hit rate limits
 
 # Lazily-initialised singletons
 _model = None
@@ -127,17 +125,15 @@ def _orders_to_frame(orders: list[dict]) -> pd.DataFrame:
     return df.reindex(columns=cols)
 
 
-def _T() -> str:
-    s = get_settings()
-    return f"`{s.gcp_project_id}.{s.bq_calls_dataset}.vendor_kpi`"
+_T = "vendor_kpi"
 
 
 def _fill_history(df: pd.DataFrame) -> pd.DataFrame:
     """
     Best-effort point-in-time fill for the rolling features when the caller did
-    not supply them. Uses recent aggregates from BigQuery; any failure leaves
-    NaN, which the saved pipeline imputes. Not strictly windowed — adequate for
-    live scoring where the goal is a current risk estimate.
+    not supply them. Uses recent aggregates from the local warehouse; any failure
+    leaves NaN, which the saved pipeline imputes. Not strictly windowed — adequate
+    for live scoring where the goal is a current risk estimate.
     """
     need = df[fe.HISTORICAL_FEATURES].isna().all(axis=None)
     if not need:
@@ -148,33 +144,33 @@ def _fill_history(df: pd.DataFrame) -> pd.DataFrame:
     customers = [int(c) for c in df["customer_id"].dropna().unique().tolist()]
 
     try:
+        cancel_rate = safe_divide(countif("order_status = 'Cancelled'"), "COUNT(*)")
         vendor_stats, zone_stats, cust_stats = {}, {}, {}
         if vendor_ids:
-            rows = [dict(r) for r in get_client().query(f"""
+            rows = db.query(f"""
                 SELECT vendor_id,
-                  SAFE_DIVIDE(COUNTIF(order_status='Cancelled'), COUNT(*)) AS vendor_cancel_rate_30d,
+                  {cancel_rate} AS vendor_cancel_rate_30d,
                   AVG(preparing_time_min) AS vendor_avg_prep_time
-                FROM {_T()}
-                WHERE vendor_id IN UNNEST({vendor_ids})
+                FROM {_T}
+                WHERE vendor_id IN ({db.placeholders(vendor_ids)})
                 GROUP BY vendor_id
-            """).result()]
+            """, tuple(vendor_ids))
             vendor_stats = {r["vendor_id"]: r for r in rows}
         if zones:
-            rows = [dict(r) for r in get_client().query(f"""
-                SELECT zone_name,
-                  SAFE_DIVIDE(COUNTIF(order_status='Cancelled'), COUNT(*)) AS zone_cancel_rate_30d
-                FROM {_T()}
-                WHERE zone_name IN UNNEST({json.dumps(zones)})
+            rows = db.query(f"""
+                SELECT zone_name, {cancel_rate} AS zone_cancel_rate_30d
+                FROM {_T}
+                WHERE zone_name IN ({db.placeholders(zones)})
                 GROUP BY zone_name
-            """).result()]
+            """, tuple(zones))
             zone_stats = {r["zone_name"]: r for r in rows}
         if customers:
-            rows = [dict(r) for r in get_client().query(f"""
+            rows = db.query(f"""
                 SELECT customer_id, COUNT(*) AS customer_order_count
-                FROM {_T()}
-                WHERE customer_id IN UNNEST({customers})
+                FROM {_T}
+                WHERE customer_id IN ({db.placeholders(customers)})
                 GROUP BY customer_id
-            """).result()]
+            """, tuple(customers))
             cust_stats = {r["customer_id"]: r for r in rows}
 
         def fill(row):
@@ -264,7 +260,7 @@ def _score_frame(df: pd.DataFrame) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 _EXPLAIN_PROMPT = """\
-You are an operations analyst for Rafeeq, a food-delivery platform in Qatar.
+You are an operations analyst for Clarity, a food-delivery platform in Qatar.
 A machine-learning model scored a food-delivery order with a {pct:.0%} chance of being cancelled.
 Top contributing factors (SHAP, positive = pushes toward cancellation): {factors}
 Order details: {order}
@@ -330,7 +326,7 @@ def _parse_gemini_json(raw: str) -> dict:
 # ---------------------------------------------------------------------------
 
 _GEMINI_PREDICT_PROMPT = """\
-You are a cancellation-risk estimator for Rafeeq, a food-delivery platform in Qatar.
+You are a cancellation-risk estimator for Clarity, a food-delivery platform in Qatar.
 Estimate the probability (0.0–1.0) that the following order will be CANCELLED, using
 food-delivery domain knowledge and the supplied signals — especially the vendor's and
 zone's historical cancellation rates when present.
@@ -355,13 +351,13 @@ _GEMINI_SIGNAL_FIELDS = [
     "restaurant_name", "cuisine", "zone_name", "customer_zone", "platform_name",
     "total_order_value", "delivery_charge", "vendor_to_customer_dist", "driver_vendor_dist",
     "is_pre_order", "new_customer", "is_pro_user", "payment_type", "customer_device_type",
-    "order_placement_time", "rafeeq_time_to_accept_order_min", "vendor_to_accept_order_min",
+    "order_placement_time", "clarity_time_to_accept_order_min", "vendor_to_accept_order_min",
     "vendor_cancel_rate_30d", "zone_cancel_rate_30d", "customer_order_count", "vendor_avg_prep_time",
 ]
 
 
 async def _gemini_score_row(row: dict, order_id, threshold: float) -> dict:
-    """Score a SINGLE already-history-filled row with Gemini (no BigQuery here)."""
+    """Score a SINGLE already-history-filled row with Gemini (no SQL here)."""
     signals = {k: row.get(k) for k in _GEMINI_SIGNAL_FIELDS
                if row.get(k) is not None and not (isinstance(row.get(k), float) and np.isnan(row.get(k)))}
     prompt = _GEMINI_PREDICT_PROMPT.format(order=json.dumps(signals, default=str))
@@ -423,7 +419,7 @@ def _resolve_engine(engine: str) -> str:
 async def _persist(preds: list[dict]) -> None:
     """Fire-and-forget save of predictions that carry an order_id."""
     loop = asyncio.get_running_loop()
-    await loop.run_in_executor(None, bq_predictions.save_predictions, preds)
+    await loop.run_in_executor(None, db_predictions.save_predictions, preds)
 
 
 async def predict_one(order: dict, engine: str = "auto", with_gemini: bool = True) -> dict:
@@ -461,20 +457,10 @@ def _fetch_live_orders_sync(limit: int) -> list[dict]:
     cols = ", ".join(fe.RAW_COLUMNS + ["restaurant_name"])  # restaurant_name is display-only
     # Tolerant 'active' filter: anything not clearly delivered/cancelled.
     active = "NOT (LOWER(TRIM(order_status)) LIKE '%cancel%' OR LOWER(TRIM(order_status)) LIKE '%deliver%')"
-    rows = [dict(r) for r in get_client().query(f"""
-        SELECT {cols}
-        FROM {_T()}
-        WHERE {active}
-        ORDER BY order_placement_date DESC, order_placement_time DESC
-        LIMIT {limit}
-    """).result()]
+    order = "ORDER BY order_placement_date DESC, order_placement_time DESC LIMIT ?"
+    rows = db.query(f"SELECT {cols} FROM {_T} WHERE {active} {order}", (limit,))
     if not rows:
-        rows = [dict(r) for r in get_client().query(f"""
-            SELECT {cols}
-            FROM {_T()}
-            ORDER BY order_placement_date DESC, order_placement_time DESC
-            LIMIT {limit}
-        """).result()]
+        rows = db.query(f"SELECT {cols} FROM {_T} {order}", (limit,))
     return rows
 
 
@@ -484,6 +470,11 @@ def _attach_context(pred: dict, order: dict) -> dict:
     return pred
 
 
+# Snapshot-cached: recomputing pays 2+ warehouse round-trips (orders + stored
+# predictions) plus Gemini scoring of any new orders — far too slow to run while
+# a user waits. The warm loop in main.py keeps this populated; the endpoint
+# serves the snapshot (generated_at tells the user how fresh it is).
+@ttl_cache
 async def live_queue(limit: int = 50, engine: str = "auto") -> dict:
     threshold = _threshold()
     empty = {"count": 0, "threshold": threshold, "engine": "none", "generated_at": utcnow_iso(), "orders": []}
@@ -501,7 +492,7 @@ async def live_queue(limit: int = 50, engine: str = "auto") -> dict:
     by_id = {str(o["id"]): o for o in orders if o.get("id") is not None}
 
     # Read-through cache: reuse any prediction already stored for these orders.
-    stored = await loop.run_in_executor(None, bq_predictions.get_predictions, list(by_id.keys()), used)
+    stored = await loop.run_in_executor(None, db_predictions.get_predictions, list(by_id.keys()), used)
     results: list[dict] = [_attach_context(stored[oid], by_id[oid]) for oid in stored if oid in by_id]
 
     uncached = [o for o in orders if str(o.get("id")) not in stored]
@@ -510,7 +501,7 @@ async def live_queue(limit: int = 50, engine: str = "auto") -> dict:
     if uncached:
         if used == "gemini":
             # Batch the history lookup ONCE (3 queries total), then score the
-            # capped batch concurrently — no per-order BigQuery round-trips.
+            # capped batch concurrently — no per-order warehouse round-trips.
             batch = uncached[:_GEMINI_QUEUE_MAX_NEW]
             df = await loop.run_in_executor(None, _fill_history, _orders_to_frame(batch))
             rows = [df.iloc[i].to_dict() for i in range(len(df))]
@@ -538,16 +529,8 @@ async def live_queue(limit: int = 50, engine: str = "auto") -> dict:
 
 def _fetch_order_sync(order_id: str) -> Optional[dict]:
     cols = ", ".join(fe.RAW_COLUMNS + ["restaurant_name"])
-    rows = [dict(r) for r in get_client().query(f"""
-        SELECT {cols} FROM {_T()} WHERE CAST(id AS STRING) = @oid LIMIT 1
-    """, job_config=_id_param(order_id)).result()]
-    return rows[0] if rows else None
-
-
-def _id_param(order_id: str):
-    from google.cloud import bigquery
-    return bigquery.QueryJobConfig(
-        query_parameters=[bigquery.ScalarQueryParameter("oid", "STRING", order_id)]
+    return db.query_one(
+        f"SELECT {cols} FROM {_T} WHERE CAST(id AS TEXT) = ? LIMIT 1", (str(order_id),)
     )
 
 
@@ -556,7 +539,7 @@ async def explain_order(order_id: str, engine: str = "auto") -> Optional[dict]:
     loop = asyncio.get_running_loop()
 
     # Reuse a stored prediction if it already carries a natural-language explanation.
-    stored = await loop.run_in_executor(None, bq_predictions.get_predictions, [order_id], used)
+    stored = await loop.run_in_executor(None, db_predictions.get_predictions, [order_id], used)
     cached = stored.get(str(order_id))
     if cached and cached.get("gemini_explanation"):
         return cached

@@ -6,7 +6,7 @@ product
 
 ## Users
 
-Mixed internal teams at Rafeeq, a Qatar-based food-delivery company. One shared
+Mixed internal teams at Clarity, a Qatar-based food-delivery company. One shared
 tool spanning three audiences with different tempos:
 
 - **CX / support leadership** — monitor sentiment, call/message volumes, and
@@ -24,7 +24,7 @@ transcripts.
 
 ## Product Purpose
 
-Rafeeq Analytics turns raw customer interactions (calls, support messages) into
+Clarity Analytics turns raw customer interactions (calls, support messages) into
 decisions. It analyzes transcripts for sentiment, intent, and entities; surfaces
 trends and negative-signal triggers across channels and geography; and predicts
 cancellation risk. Success is when a leader spots a rising issue before it
@@ -34,7 +34,7 @@ customer-health read without exporting to a spreadsheet.
 ## Brand Personality
 
 **Bold, modern, premium.** The interface is a precision instrument that happens
-to look striking — it leans fully into the Rafeeq purple liquid-glass identity
+to look striking — it leans fully into the Clarity purple liquid-glass identity
 rather than apologizing for being an internal tool. Confident, data-forward, and
 high-end, but never decorative at the expense of legibility. Voice is direct and
 expert: it states what the data says, it doesn't hedge.

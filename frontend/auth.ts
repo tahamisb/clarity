@@ -21,7 +21,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     ...authConfig.providers,
     // ---------------------------------------------------------------------
     // PLACEHOLDER LOGIN — remove once real Google OAuth is live.
-    // Accepts any @gorafeeq.com email + the shared DEV_LOGIN_PASSWORD.
+    // Accepts any email on ALLOWED_DOMAIN + the shared DEV_LOGIN_PASSWORD.
     // ---------------------------------------------------------------------
     Credentials({
       name: "Work email",
