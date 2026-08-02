@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: clarity-api
+    runtime: docker
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      # sync: false = prompt for the value in the dashboard, never store it here.
+      - key: GEMINI_API_KEY
+        sync: false
+      # Comma-separated. Must include the Netlify site URL or the browser blocks
+      # every request. No trailing slash.
+      - key: CORS_ORIGINS
+        sync: false
