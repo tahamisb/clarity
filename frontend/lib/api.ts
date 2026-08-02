@@ -78,6 +78,19 @@ async function apiPost<T>(path: string, body: unknown): Promise<T | null> {
   }
 }
 
+/**
+ * Register an email on the "Unlock full version" waitlist so sales can follow
+ * up. Returns false if the backend rejected it or is unreachable.
+ */
+export async function joinWaitlist(input: {
+  email: string
+  company?: string
+  note?: string
+  plan?: string
+}): Promise<boolean> {
+  return (await apiPost<{ status: string }>("/api/v1/waitlist", input)) !== null
+}
+
 // ---------------------------------------------------------------------------
 // Chart data shapes (populated from backend analytics endpoints)
 // ---------------------------------------------------------------------------

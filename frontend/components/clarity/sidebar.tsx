@@ -16,6 +16,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { ClarityLogo } from "@/components/clarity/logo"
+import { UpgradeCTA } from "@/components/clarity/upgrade-modal"
 import { useT } from "@/lib/i18n"
 import { useState, useEffect } from "react"
 import { usePathname, useRouter } from "next/navigation"
@@ -191,6 +192,9 @@ export function Sidebar() {
       </nav>
 
       <div className="border-t border-sidebar-border px-3 py-4">
+        <div className="pb-3">
+          <UpgradeCTA />
+        </div>
         <ul className="flex flex-col gap-1">
           {[
             { labelKey: "nav.settings", icon: Settings, href: "/settings" },

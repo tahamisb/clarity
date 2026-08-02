@@ -47,6 +47,70 @@ export const translations: Dict = {
   "nav.settings": { en: "Settings", ar: "الإعدادات" },
   "nav.help": { en: "Help", ar: "المساعدة" },
 
+  // — Upgrade / waitlist modal ————————————————————————————————————————————
+  "up.ctaKicker": { en: "Trial version", ar: "نسخة تجريبية" },
+  "up.ctaLabel": { en: "Unlock full version", ar: "افتح النسخة الكاملة" },
+  "up.badge": { en: "Full version", ar: "النسخة الكاملة" },
+  "up.title": { en: "Unlock every signal.", ar: "افتح كل الإشارات." },
+  "up.subtitle": {
+    en: "You're seeing a limited slice of Clarity. The full version unlocks live ingestion, unlimited history and custom models across every channel.",
+    ar: "أنت ترى جزءاً محدوداً من Clarity. النسخة الكاملة تفتح التغذية اللحظية والسجل غير المحدود والنماذج المخصّصة عبر كل القنوات.",
+  },
+  "up.popular": { en: "Most popular", ar: "الأكثر طلباً" },
+  "up.customPricing": { en: "Talk to sales", ar: "تحدّث مع المبيعات" },
+  "up.scopedWithYou": {
+    en: "Scoped to your volume and channels",
+    ar: "مُحدَّد حسب حجمك وقنواتك",
+  },
+  "up.team.name": { en: "Team", ar: "فريق" },
+  "up.team.blurb": {
+    en: "One CX team, one warehouse.",
+    ar: "فريق تجربة عملاء واحد، مستودع واحد.",
+  },
+  "up.team.f1": { en: "All dashboards, no sampling", ar: "كل اللوحات، بدون عيّنات" },
+  "up.team.f2": { en: "12 months of history", ar: "سجل ١٢ شهراً" },
+  "up.team.f3": { en: "Call + message analysis", ar: "تحليل المكالمات والرسائل" },
+  "up.team.f4": { en: "CSV & scheduled exports", ar: "تصدير CSV ومجدول" },
+  "up.growth.name": { en: "Growth", ar: "نمو" },
+  "up.growth.blurb": {
+    en: "Multi-brand, multi-channel operations.",
+    ar: "عمليات متعدّدة العلامات والقنوات.",
+  },
+  "up.growth.f1": { en: "Unlimited seats & verticals", ar: "مقاعد وقطاعات غير محدودة" },
+  "up.growth.f2": { en: "Live ingestion & alerts", ar: "تغذية لحظية وتنبيهات" },
+  "up.growth.f3": { en: "Custom intents & categories", ar: "نوايا وفئات مخصّصة" },
+  "up.growth.f4": { en: "Cancellation risk models", ar: "نماذج خطورة الإلغاء" },
+  "up.ent.name": { en: "Enterprise", ar: "مؤسسات" },
+  "up.ent.blurb": {
+    en: "Your infrastructure, your rules.",
+    ar: "بنيتك التحتية، بقواعدك.",
+  },
+  "up.ent.f1": { en: "Private cloud or on-prem", ar: "سحابة خاصة أو محلية" },
+  "up.ent.f2": { en: "SSO, roles & audit logs", ar: "دخول موحّد وأدوار وسجلات تدقيق" },
+  "up.ent.f3": { en: "Dedicated success manager", ar: "مدير نجاح مخصّص" },
+  "up.ent.f4": { en: "Custom SLAs & API access", ar: "اتفاقيات خدمة مخصّصة ووصول API" },
+  "up.formTitle": { en: "Join the waitlist", ar: "انضم لقائمة الانتظار" },
+  "up.formBody": {
+    en: "Leave your email and our sales team will contact you with a solution built around your operation.",
+    ar: "اترك بريدك وسيتواصل معك فريق المبيعات بحلّ مبني على طبيعة عملك.",
+  },
+  "up.emailPlaceholder": { en: "Work email", ar: "بريد العمل" },
+  "up.companyPlaceholder": { en: "Company (optional)", ar: "الشركة (اختياري)" },
+  "up.joinWaitlist": { en: "Join the waitlist", ar: "انضم للقائمة" },
+  "up.noCard": {
+    en: "No card, no commitment — just a conversation.",
+    ar: "بدون بطاقة وبدون التزام — مجرّد محادثة.",
+  },
+  "up.error": {
+    en: "Couldn't submit right now. Please try again.",
+    ar: "تعذّر الإرسال الآن. حاول مرة أخرى.",
+  },
+  "up.doneTitle": { en: "You're on the list.", ar: "تم تسجيلك في القائمة." },
+  "up.doneBody": {
+    en: "Our sales team will reach out shortly to scope a solution for you.",
+    ar: "سيتواصل معك فريق المبيعات قريباً لتحديد الحل المناسب لك.",
+  },
+
   // — Top bar ——————————————————————————————————————————————————————————————
   "top.brand": { en: "Clarity", ar: "Clarity" },
   "top.searchCalls": { en: "Search calls…", ar: "البحث في المكالمات…" },

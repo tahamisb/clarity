@@ -14,3 +14,15 @@ services:
       # matches no origin and silently blocks every browser request.
       - key: CORS_ORIGINS
         value: https://clarity-saas.netlify.app
+      # Waitlist signup notifications. Without SMTP_PASSWORD the signups are
+      # still stored, just not emailed.
+      - key: SMTP_HOST
+        value: smtp.gmail.com
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        value: t.mutahir@gorafeeq.com
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: WAITLIST_NOTIFY_TO
+        value: t.mutahir@gorafeeq.com

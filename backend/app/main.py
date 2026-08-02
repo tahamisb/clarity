@@ -20,7 +20,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.routers import call_analytics, calls, health, messages, sentiment, text_analytics, chat_analytics
+from app.routers import call_analytics, calls, health, messages, sentiment, text_analytics, chat_analytics, waitlist
 from app.services.local_db import DB_PATH, ping as db_ping
 
 settings = get_settings()
@@ -154,6 +154,7 @@ app.include_router(messages.router)
 app.include_router(sentiment.router)
 app.include_router(text_analytics.router)
 app.include_router(chat_analytics.router)
+app.include_router(waitlist.router)
 
 # Pillar 03 — cancellation prediction (ML + Gemini)
 # Imported defensively: the cancellation feature pulls in ML libraries
