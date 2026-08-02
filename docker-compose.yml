@@ -42,7 +42,9 @@ services:
       - "3000"
 
   caddy:
-    image: caddy:2-alpine
+    # Config is baked in — see caddy/Dockerfile for why it isn't bind-mounted.
+    build:
+      context: ./caddy
     restart: unless-stopped
     depends_on:
       - frontend
@@ -51,11 +53,12 @@ services:
       - "80:80"
       - "443:443"
     environment:
+      # Read at runtime by {$SITE_ADDRESS} in the Caddyfile, so switching
+      # domains needs only a restart, not a rebuild.
       SITE_ADDRESS: ${SITE_ADDRESS}
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      # Persist issued certificates so a restart doesn't re-request them and
-      # burn through Let's Encrypt rate limits.
+      # Named volumes, not host paths — persists issued certificates so a
+      # restart doesn't re-request them and burn Let's Encrypt rate limits.
       - caddy_data:/data
       - caddy_config:/config
 

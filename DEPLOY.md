@@ -131,7 +131,8 @@ survives rebuilds.
 | File | Purpose |
 | --- | --- |
 | `docker-compose.yml` | The three services and their wiring |
-| `Caddyfile` | Path routing + automatic TLS |
+| `caddy/Caddyfile` | Path routing + automatic TLS |
+| `caddy/Dockerfile` | Bakes the config in (no fragile bind mount) |
 | `frontend/Dockerfile` | Multi-stage pnpm build, runs `next start` |
 | `frontend/.dockerignore`, `backend/.dockerignore` | Keep build contexts small |
 | `.env.example` | Template for the real `.env` |
@@ -157,3 +158,12 @@ backend` will say so.
 
 **Cert never issues** — DNS isn't resolving to the VPS yet, or port 80 is
 blocked. Let's Encrypt validates over port 80 even for an HTTPS cert.
+
+**"Are you trying to mount a directory onto a file"** — a leftover from when the
+Caddyfile was bind-mounted. Docker creates a host bind path as an empty
+*directory* if it doesn't exist, then can't mount it over a file. The config is
+baked into the image now, so this shouldn't recur; if a stale
+`/docker/clarity/Caddyfile` directory is still lying around, `rm -rf` it.
+
+**Caddy routing changes don't take effect** — the config lives in the image now.
+`docker compose up -d --build caddy`, not `restart`.
