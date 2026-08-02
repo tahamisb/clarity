@@ -80,12 +80,19 @@ def waitlist_status():
         "smtp_password_set": bool(s.smtp_password),
         "notify_to": s.waitlist_notify_to,
         "signups": (query("SELECT COUNT(*) AS n FROM waitlist") or [{"n": 0}])[0]["n"],
+        "last_send_error": _last_send_error,
     }
+
+
+# Why the last send failed, surfaced by /waitlist/status. ponytail: a single
+# in-process string, not a delivery log — enough to debug a deploy you can't shell into.
+_last_send_error: str | None = None
 
 
 def notify_sales(row: dict) -> None:
     """Email a signup to the sales inbox. Runs as a background task — SMTP is
     slow and must never fail the signup, which is already stored by then."""
+    global _last_send_error
     s = get_settings()
     if not (s.smtp_host and s.smtp_user and s.smtp_password):
         logger.warning(
@@ -119,10 +126,12 @@ def notify_sales(row: dict) -> None:
             # spaces are decoration and some servers reject them.
             smtp.login(s.smtp_user, s.smtp_password.replace(" ", ""))
             smtp.send_message(msg)
+        _last_send_error = None
         logger.info("waitlist: emailed %s to %s", row["email"], s.waitlist_notify_to)
     except Exception as exc:  # noqa: BLE001
         # The row is in the warehouse regardless — a bounced notification is a
         # delivery problem, not lost data.
+        _last_send_error = f"{type(exc).__name__}: {exc}"[:300]
         logger.error("waitlist: email notify failed for %s — %s", row["email"], exc)
 
 
