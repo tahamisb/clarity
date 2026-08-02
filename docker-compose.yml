@@ -1,0 +1,64 @@
+services:
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    environment:
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.5-flash}
+      GEMINI_CLASSIFY_MODEL: ${GEMINI_CLASSIFY_MODEL:-gemini-3.1-flash-lite}
+      GEMINI_THINKING_LEVEL: ${GEMINI_THINKING_LEVEL:-minimal}
+      GEMINI_CONCURRENCY: ${GEMINI_CONCURRENCY:-5}
+      APP_HOST: 0.0.0.0
+      PORT: 8001
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      # Caddy puts the frontend on the same origin, so no browser request is
+      # ever cross-origin. Kept populated only for direct/tooling access.
+      CORS_ORIGINS: ${PUBLIC_URL}
+    expose:
+      - "8001"
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # Baked into the client bundle at build time — see frontend/Dockerfile.
+        # Absolute (not relative) so server-rendered fetches resolve too.
+        NEXT_PUBLIC_API_URL: ${PUBLIC_URL}
+        NEXT_PUBLIC_ALLOWED_DOMAIN: ${NEXT_PUBLIC_ALLOWED_DOMAIN}
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      AUTH_SECRET: ${AUTH_SECRET}
+      AUTH_URL: ${PUBLIC_URL}
+      AUTH_TRUST_HOST: "true"
+      DEV_LOGIN_PASSWORD: ${DEV_LOGIN_PASSWORD}
+      # Leave both blank until IT provisions real OAuth; the placeholder
+      # credentials provider in auth.ts handles login in the meantime.
+      AUTH_GOOGLE_ID: ${AUTH_GOOGLE_ID:-}
+      AUTH_GOOGLE_SECRET: ${AUTH_GOOGLE_SECRET:-}
+    expose:
+      - "3000"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - frontend
+      - backend
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Persist issued certificates so a restart doesn't re-request them and
+      # burn through Let's Encrypt rate limits.
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

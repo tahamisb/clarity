@@ -1,0 +1,49 @@
+# Single public origin for both services. Because the browser only ever talks
+# to one host, there is no cross-origin request and CORS never comes into play.
+#
+# SITE_ADDRESS is set in .env:
+#   clarity.example.com  -> Caddy provisions a Let's Encrypt cert automatically
+#   :80                  -> plain HTTP on the bare IP (no cert possible)
+{$SITE_ADDRESS} {
+	encode gzip
+
+	# NextAuth's own routes. More specific than /api/* below, and Caddy sorts
+	# handle blocks by path specificity, so this wins.
+	handle /api/auth/* {
+		reverse_proxy frontend:3000
+	}
+
+	# Everything the FastAPI app owns: /api/v1/*, /api/cancellation/*,
+	# /api/messages/*, /api/cache/*.
+	handle /api/* {
+		reverse_proxy backend:8001
+	}
+
+	# Backend routers mounted at the root, outside the /api namespace.
+	# NOTE: do NOT add /cancellations/* here — that is a Next.js *page*. The
+	# backend's cancellation routes all live under /api/cancellation/ (singular).
+	handle /calls* {
+		reverse_proxy backend:8001
+	}
+
+	handle /analyse* {
+		reverse_proxy backend:8001
+	}
+
+	handle /analytics/* {
+		reverse_proxy backend:8001
+	}
+
+	handle /predict* {
+		reverse_proxy backend:8001
+	}
+
+	handle /health {
+		reverse_proxy backend:8001
+	}
+
+	# The Next.js app serves everything else.
+	handle {
+		reverse_proxy frontend:3000
+	}
+}
