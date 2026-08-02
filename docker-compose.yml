@@ -55,7 +55,11 @@ services:
     environment:
       # Read at runtime by {$SITE_ADDRESS} in the Caddyfile, so switching
       # domains needs only a restart, not a rebuild.
-      SITE_ADDRESS: ${SITE_ADDRESS}
+      #
+      # Falls back to :80 (plain HTTP on the bare IP). Without a default an
+      # unset value makes the Caddyfile start with a bare "{", which is invalid
+      # config — Caddy exits on boot and Docker restart-loops it forever.
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
     volumes:
       # Named volumes, not host paths — persists issued certificates so a
       # restart doesn't re-request them and burn Let's Encrypt rate limits.
