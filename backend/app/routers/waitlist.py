@@ -23,7 +23,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 
 from app.config import get_settings
-from app.services.local_db import get_conn, insert_rows
+from app.services.local_db import get_conn, insert_rows, query
 
 router = APIRouter(prefix="/api/v1", tags=["waitlist"])
 logger = logging.getLogger(__name__)
@@ -66,6 +66,23 @@ def _clean(value: str | None, limit: int) -> str | None:
     return value.strip()[:limit] or None
 
 
+@router.get("/waitlist/status")
+def waitlist_status():
+    """Is this deployment able to email signups? Secrets are never returned —
+    only whether they are set. Exists because a signup returns 201 either way,
+    so an unconfigured deploy silently swallows notifications."""
+    s = get_settings()
+    return {
+        "smtp_configured": bool(s.smtp_host and s.smtp_user and s.smtp_password),
+        "smtp_host": s.smtp_host or None,
+        "smtp_port": s.smtp_port,
+        "smtp_user_set": bool(s.smtp_user),
+        "smtp_password_set": bool(s.smtp_password),
+        "notify_to": s.waitlist_notify_to,
+        "signups": (query("SELECT COUNT(*) AS n FROM waitlist") or [{"n": 0}])[0]["n"],
+    }
+
+
 def notify_sales(row: dict) -> None:
     """Email a signup to the sales inbox. Runs as a background task — SMTP is
     slow and must never fail the signup, which is already stored by then."""
@@ -98,7 +115,9 @@ def notify_sales(row: dict) -> None:
         with connect(s.smtp_host, s.smtp_port, timeout=15) as smtp:
             if s.smtp_port != 465:
                 smtp.starttls()
-            smtp.login(s.smtp_user, s.smtp_password)
+            # Google displays app passwords as "xxxx xxxx xxxx xxxx"; the
+            # spaces are decoration and some servers reject them.
+            smtp.login(s.smtp_user, s.smtp_password.replace(" ", ""))
             smtp.send_message(msg)
         logger.info("waitlist: emailed %s to %s", row["email"], s.waitlist_notify_to)
     except Exception as exc:  # noqa: BLE001
