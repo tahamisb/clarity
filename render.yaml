@@ -10,7 +10,7 @@ services:
       # sync: false = prompt for the value in the dashboard, never store it here.
       - key: GEMINI_API_KEY
         sync: false
-      # Comma-separated. Must include the Netlify site URL or the browser blocks
-      # every request. No trailing slash.
+      # Comma-separated, no trailing slash. Left blank this becomes [""], which
+      # matches no origin and silently blocks every browser request.
       - key: CORS_ORIGINS
-        sync: false
+        value: https://clarity-saas.netlify.app
