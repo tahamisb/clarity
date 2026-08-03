@@ -86,11 +86,20 @@ AUTH_SECRET=$(openssl rand -base64 32)
 NEXT_PUBLIC_ALLOWED_DOMAIN=example.com
 DEV_LOGIN_PASSWORD=changeme
 GEMINI_API_KEY=
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=t.mutahir@gorafeeq.com
+SMTP_PASSWORD=
+WAITLIST_NOTIFY_TO=t.mutahir@gorafeeq.com
 EOF
 ```
 
 `SITE_ADDRESS` takes a comma-separated list; Caddy issues a certificate per
 name. No trailing slash on `PUBLIC_URL`.
+
+The `SMTP_*` block is what emails "Unlock full version" signups — see
+[Waitlist email](#waitlist-email). Leaving `SMTP_PASSWORD` blank is a valid
+deploy: signups are still recorded, just never emailed.
 
 To deploy on the bare IP instead (no HTTPS — a certificate cannot be issued for
 an IP), use `SITE_ADDRESS=:80` and `PUBLIC_URL=http://76.13.188.48`.
@@ -137,6 +146,9 @@ Caddy routing changes also need `--build`, since `caddy/Caddyfile` is copied
 into the image rather than mounted. `SITE_ADDRESS` is the exception — it's read
 from the environment at runtime, so switching domains only needs a restart.
 
+The `SMTP_*` values are plain runtime environment, so changing them needs only
+`docker compose up -d backend` — no rebuild.
+
 ## Adding a second project to this VPS
 
 Subdomains are free and unlimited. Give the new project its own compose stack on
@@ -152,12 +164,56 @@ Each name gets its own certificate automatically. Avoid putting projects on
 paths of one domain (`/clarity`, `/other`) — apps assume they own the root, so
 asset URLs and auth cookies break, and all of them end up sharing cookies.
 
+## Waitlist email
+
+The sidebar's "Unlock full version" button opens the tiered upgrade modal
+(`frontend/components/clarity/upgrade-modal.tsx`). Every tier reads "Talk to
+sales" — there is no pricing and no checkout. Submitting captures the email,
+optional company, and selected tier via `POST /api/v1/waitlist`, which stores
+the row and emails it to `WAITLIST_NOTIFY_TO`.
+
+A signup returns `201` whether or not email is configured, so check the deploy's
+actual state:
+
+```bash
+curl -sS https://interns26.cloud/api/v1/waitlist/status
+```
+
+`smtp_configured: false` means signups are being stored but not emailed. If it's
+`true` but nothing arrives, `last_send_error` in that same response carries the
+reason the last attempt failed.
+
+Gmail and Google Workspace reject account passwords over SMTP — `SMTP_PASSWORD`
+must be an App Password (myaccount.google.com → Security → 2-Step Verification →
+App passwords). Google displays it as `xxxx xxxx xxxx xxxx`; the spaces are
+decoration and the backend strips them.
+
+Read the captured signups:
+
+```bash
+docker compose exec backend python -c "import sqlite3; [print(r) for r in \
+  sqlite3.connect('/app/data/clarity.db').execute( \
+  'SELECT created_at,email,company,plan FROM waitlist ORDER BY created_at DESC')]"
+```
+
 ## Notes on data
 
 `backend/data/clarity.db` is generated inside the image at build time by
 `scripts/generate_mock_db.py`, and the generator is seeded — every image gets
-byte-identical data. Nothing to back up, no volume to mount. When real data
-lands that changes: the database will need a named volume to survive rebuilds.
+byte-identical analytics data.
+
+The `waitlist` table is the exception: it's written at runtime, so `/app/data` is
+a named volume (`backend_data`) to keep signups across rebuilds. Docker seeds an
+empty volume from the image on first attach, so the mock warehouse still arrives.
+
+The consequence is that **the volume wins once it exists** — rebuilding with
+changed mock data will not reach a running deploy. To take new mock data:
+
+```bash
+docker compose down -v && docker compose up -d --build   # DROPS waitlist signups
+```
+
+Export the signups first (query above) if they matter.
 
 ## Files this setup added
 

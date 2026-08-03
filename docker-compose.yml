@@ -15,8 +15,29 @@ services:
       # Caddy puts the frontend on the same origin, so no browser request is
       # ever cross-origin. Kept populated only for direct/tooling access.
       CORS_ORIGINS: ${PUBLIC_URL}
+      # Waitlist signups from the upgrade modal. Blank credentials are valid:
+      # the signup is still stored, just not emailed. Check which state a
+      # deploy is in with GET /api/v1/waitlist/status.
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      WAITLIST_NOTIFY_TO: ${WAITLIST_NOTIFY_TO:-t.mutahir@gorafeeq.com}
     expose:
       - "8001"
+    volumes:
+      # The image bakes data/clarity.db at build time (see backend/Dockerfile),
+      # but the waitlist table is written at *runtime* — without a volume every
+      # rebuild silently discards captured leads. Docker seeds an empty named
+      # volume from the image's /app/data on first attach, so the mock warehouse
+      # still arrives intact.
+      #
+      # Trade-off: once the volume exists it is authoritative, so a rebuild that
+      # changes the generated mock data will NOT reach an existing deploy. Run
+      # `docker compose down -v` to take new mock data (this drops signups —
+      # export them first, see DEPLOY.md).
+      - backend_data:/app/data
 
   frontend:
     build:
@@ -69,3 +90,4 @@ services:
 volumes:
   caddy_data:
   caddy_config:
+  backend_data:
