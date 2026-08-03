@@ -37,9 +37,15 @@ export function negativeCustomersCsvUrl(range: TimeRange, vertical: VerticalFilt
 async function apiFetch<T>(path: string): Promise<T | null> {
   try {
     const res = await fetch(`${BASE}${path}`, { cache: "no-store" })
-    if (!res.ok) return null
+    if (!res.ok) {
+      console.warn(`[api] ${res.status} ${BASE}${path}`)
+      return null
+    }
     return (await res.json()) as T
-  } catch {
+  } catch (err) {
+    // Usually CORS or the backend being down. Callers turn null into an empty
+    // panel, so without this the whole dashboard just renders zeros in silence.
+    console.warn(`[api] request failed: ${BASE}${path}`, err)
     return null
   }
 }
@@ -70,6 +76,19 @@ async function apiPost<T>(path: string, body: unknown): Promise<T | null> {
   } catch {
     return null
   }
+}
+
+/**
+ * Register an email on the "Unlock full version" waitlist so sales can follow
+ * up. Returns false if the backend rejected it or is unreachable.
+ */
+export async function joinWaitlist(input: {
+  email: string
+  company?: string
+  note?: string
+  plan?: string
+}): Promise<boolean> {
+  return (await apiPost<{ status: string }>("/api/v1/waitlist", input)) !== null
 }
 
 // ---------------------------------------------------------------------------

@@ -27,6 +27,15 @@ class Settings(BaseSettings):
     classify_batch_size: int = 10
     classify_batch_delay_s: float = 0.5
 
+    # Waitlist notifications (see app/routers/waitlist.py). Leave smtp_host or
+    # the credentials blank and signups are still stored — just not emailed.
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""  # defaults to smtp_user
+    waitlist_notify_to: str = "t.mutahir@gorafeeq.com"
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",")]
