@@ -6,7 +6,12 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     # Gemini
-    gemini_api_key: str
+    # Defaults to empty rather than being required. The app is documented to
+    # boot without it — compose passes an empty string, AI calls then fail
+    # individually and /api/v1/health reports it. Making it mandatory also
+    # broke the image build, where scripts/generate_mock_db.py imports the
+    # clock, which reads settings, in an environment that has no secrets.
+    gemini_api_key: str = ""
     gemini_model: str = "gemini-3.5-flash"
     # Model for high-volume chat/message classification. Cheapest capable tier;
     # set to gemini-3.5-flash to match Pillar 01 if lite quality ever disappoints.
