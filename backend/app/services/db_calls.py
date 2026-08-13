@@ -12,7 +12,7 @@ import json
 import logging
 from typing import List
 
-from app.services import local_db as db
+from app.services import warehouse as db
 from app.utils.clock import now_sql
 
 logger = logging.getLogger(__name__)
@@ -85,7 +85,7 @@ def _enrich_sync(order_ids: List[str]) -> List[dict]:
     for row in db.query(f"""
         SELECT CAST(vi.order_id AS TEXT) AS order_id, vi.product_name, vi.cat_name,
                CAST(vi.count AS INTEGER) AS quantity,
-               CAST(vi.total_value AS REAL) AS item_value
+               {db.as_float("vi.total_value")} AS item_value
         FROM vendor_items_kpi vi
         WHERE CAST(vi.order_id AS TEXT) IN ({marks})
     """, ids):

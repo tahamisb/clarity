@@ -1,4 +1,43 @@
+import os
+import shutil
+import tempfile
+from pathlib import Path
+
 import pytest
+
+_SNAPSHOT = Path(__file__).resolve().parent.parent / "data" / "clarity.db"
+
+
+def pytest_configure(config):  # noqa: ARG001 — pytest hook signature
+    """Run the whole session against a throwaway copy of the warehouse.
+
+    Some tests write: the waitlist test POSTs a signup, which lands in
+    `data/clarity.db`. That file is the reference dataset the Postgres parity
+    gate is measured against, so every test run was quietly drifting it — six
+    junk rows per run, and then a comparison that reports differences nobody
+    introduced.
+
+    Copying it here costs ~35 MB of temp space per session and removes the
+    whole class of problem. `local_db` reads $SQLITE_PATH at import, so this
+    has to be set before any app module loads — hence pytest_configure rather
+    than a fixture.
+    """
+    if not _SNAPSHOT.exists() or os.environ.get("SQLITE_PATH"):
+        return
+    scratch = Path(tempfile.mkdtemp(prefix="clarity-tests-")) / _SNAPSHOT.name
+    shutil.copy2(_SNAPSHOT, scratch)
+    for suffix in ("-wal", "-shm"):
+        side = _SNAPSHOT.with_name(_SNAPSHOT.name + suffix)
+        if side.exists():
+            shutil.copy2(side, scratch.with_name(scratch.name + suffix))
+    os.environ["SQLITE_PATH"] = str(scratch)
+    config._clarity_scratch_dir = scratch.parent  # noqa: SLF001
+
+
+def pytest_unconfigure(config):
+    scratch_dir = getattr(config, "_clarity_scratch_dir", None)
+    if scratch_dir:
+        shutil.rmtree(scratch_dir, ignore_errors=True)
 
 
 @pytest.fixture

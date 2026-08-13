@@ -31,7 +31,7 @@ import { useAutoRefresh } from "@/lib/settings-context"
 import { useTimeFilter } from "@/lib/time-filter-context"
 import { filterByRange } from "@/lib/time-range"
 import { useT, useTV } from "@/lib/i18n"
-import { todayStr } from "@/lib/frozen-clock"
+import { todayStr } from "@/lib/clock"
 
 const CATEGORIES = [
   "Billing", "Technical", "Roaming", "Account Access", "Returns", "Complaints", "General",

@@ -4,8 +4,8 @@ import asyncio
 import logging
 from typing import Optional
 
-from app.services import local_db as db
-from app.services.local_db import countif, hour_of, safe_divide
+from app.services import warehouse as db
+from app.services.warehouse import countif, hour_of, safe_divide, shift_hours
 from app.services.ttl_cache import ttl_cache
 
 logger = logging.getLogger(__name__)
@@ -77,7 +77,7 @@ def _contact_rate_sync(start: Optional[str], end: Optional[str]) -> dict:
     # order_placement_time is Qatar local (UTC+3, no DST) — hence the shift.
     row = db.query_one(f"""
         WITH chat_orders AS (
-            SELECT order_id, datetime(MAX(created_at), '+3 hours') AS last_chat_at_qatar
+            SELECT order_id, {shift_hours("MAX(created_at)", 3)} AS last_chat_at_qatar
             FROM chat_history
             WHERE order_id IS NOT NULL
             GROUP BY order_id
@@ -91,8 +91,12 @@ def _contact_rate_sync(start: Optional[str], end: Optional[str]) -> dict:
             )} AS orders_with_chat_after
         FROM vendor_kpi o
         LEFT JOIN chat_orders co ON o.id = co.order_id
-        WHERE (:start IS NULL OR o.order_placement_date >= :start)
-          AND (:end IS NULL OR o.order_placement_date <= :end)
+        -- CAST(... AS TEXT), not a bare `:start IS NULL`: a parameter used
+        -- only in a null test gives Postgres nothing to infer a type from
+        -- ("could not determine data type of parameter $1"). SQLite is happy
+        -- either way, so the cast is the portable spelling.
+        WHERE (CAST(:start AS TEXT) IS NULL OR o.order_placement_date >= :start)
+          AND (CAST(:end AS TEXT) IS NULL OR o.order_placement_date <= :end)
     """, {"start": start, "end": end})
     total, contacted = row["total_orders"], row["orders_with_chat_after"]
     return {

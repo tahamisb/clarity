@@ -24,6 +24,7 @@ here as Python UDFs and used verbatim in the rewritten queries:
 from __future__ import annotations
 
 import logging
+import os
 import re
 import sqlite3
 import threading
@@ -33,7 +34,14 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-DB_PATH = Path(__file__).resolve().parents[2] / "data" / "clarity.db"
+_DEFAULT_DB = Path(__file__).resolve().parents[2] / "data" / "clarity.db"
+# Read straight from the environment rather than through app.config, so this
+# module stays importable with nothing but the standard library. The simulator's
+# `sim verify` imports the UDF shims below to run its half of the comparison
+# with the exact functions the app uses; routing this through pydantic-settings
+# would drag the backend's whole dependency tree into the simulator image for
+# the sake of one path.
+DB_PATH = Path(os.environ["SQLITE_PATH"]) if os.environ.get("SQLITE_PATH") else _DEFAULT_DB
 
 _local = threading.local()
 # Services run their queries on the default executor, i.e. several threads —
@@ -192,3 +200,37 @@ def ping() -> bool:
         return True
     except Exception:  # noqa: BLE001
         return False
+
+
+# ---------------------------------------------------------------------------
+# Driver interface — the rest of the app reaches these through `warehouse.py`,
+# which presents the same names for the Postgres backend.
+# ---------------------------------------------------------------------------
+
+def available() -> bool:
+    """A SQLite warehouse can simply be absent; a remote one can only be down."""
+    return DB_PATH.exists()
+
+
+def describe() -> str:
+    return f"SQLite warehouse at {DB_PATH}"
+
+
+_WAITLIST_DDL = """
+CREATE TABLE IF NOT EXISTS waitlist (
+    email      TEXT NOT NULL,
+    company    TEXT,
+    note       TEXT,
+    plan       TEXT,
+    created_at TEXT NOT NULL
+)
+"""
+
+
+def ensure_waitlist_table() -> None:
+    """The waitlist is the one table written at runtime, so it has to exist
+    before the first signup — the generated snapshot may predate it."""
+    with _write_lock:
+        conn = get_conn()
+        conn.execute(_WAITLIST_DDL)
+        conn.commit()

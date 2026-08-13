@@ -23,7 +23,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 
 from app.config import get_settings
-from app.services.local_db import get_conn, insert_rows, query
+from app.services.warehouse import ensure_waitlist_table, insert_rows, query
 
 router = APIRouter(prefix="/api/v1", tags=["waitlist"])
 logger = logging.getLogger(__name__)
@@ -32,24 +32,10 @@ logger = logging.getLogger(__name__)
 # for a field a human reads anyway. Swap if we ever gate on deliverability.
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[A-Za-z]{2,}$")
 
-_DDL = """
-CREATE TABLE IF NOT EXISTS waitlist (
-    email      TEXT NOT NULL,
-    company    TEXT,
-    note       TEXT,
-    plan       TEXT,
-    created_at TEXT NOT NULL
-)
-"""
-
-
-def _ensure_table() -> None:
-    conn = get_conn()
-    conn.execute(_DDL)
-    conn.commit()
-
-
-_ensure_table()
+# The waitlist is the only table written at runtime, so it has to exist before
+# the first signup. Where it lives and how it is created is the warehouse
+# driver's business — on Postgres it ships with the schema and this is a no-op.
+ensure_waitlist_table()
 
 
 class WaitlistSignup(BaseModel):

@@ -14,7 +14,7 @@ import { useSettings, useAutoRefresh } from "./settings-context"
 import { useRole } from "./use-role"
 import { useTimeFilter } from "./time-filter-context"
 import type { UserRole } from "./roles"
-import { now } from "./frozen-clock"
+import { now } from "./clock"
 
 // ---------------------------------------------------------------------------
 // Role-aware, in-app notifications.
@@ -306,7 +306,7 @@ export function useNotifications(): NotificationsContextValue {
   return ctx
 }
 
-/** "3h ago" style formatter for the panel — measured against the frozen clock. */
+/** "3h ago" style formatter for the panel — measured against the app clock. */
 export function formatRelative(ts: number): string {
   const diff = now().getTime() - ts
   if (diff < 60_000) return "just now"

@@ -18,7 +18,7 @@ export type PresetRange = "wtd" | "mtd" | "qtd" | "ytd" | "all"
 export type CustomRange = { start: string; end: string }
 export type TimeRange = PresetRange | CustomRange
 
-import { now } from "./frozen-clock"
+import { now } from "./clock"
 
 export const TIME_RANGES: { value: PresetRange; label: string; short: string }[] = [
   { value: "wtd", label: "Week to date", short: "WTD" },

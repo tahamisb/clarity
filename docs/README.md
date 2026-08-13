@@ -8,10 +8,21 @@ old `backend/README.md`, `docs/HANDOFF.md`, and `frontend/AUTH_SETUP.md`
 
 Last verified against code: 2026-07-28.
 
-> **Data source:** the app no longer reads BigQuery. Every table lives in a local
-> SQLite file, `backend/data/clarity.db`, built by
-> [`scripts/generate_mock_db.py`](../backend/scripts/generate_mock_db.py) from synthesised
-> data. See §1.1.
+> **Data source:** the app no longer reads BigQuery. It reads one of two
+> warehouses, selected by `WAREHOUSE_BACKEND` and fronted by
+> [`app/services/warehouse.py`](../backend/app/services/warehouse.py):
+>
+> - `sqlite` *(default)* — the local file `backend/data/clarity.db`, built by
+>   [`scripts/generate_mock_db.py`](../backend/scripts/generate_mock_db.py) from
+>   synthesised data, frozen at 2026-07-28. See §1.1.
+> - `postgres` — the simulated live warehouse in
+>   [`warehouse/`](../warehouse/README.md), a stand-in for the organisation's
+>   real one.
+>
+> The SQL is identical for both; `warehouse.py` documents how. Any change to a
+> query must keep `backend/scripts/warehouse_parity.py` green — it diffs every
+> endpoint's JSON across the two backends. Design and phasing:
+> [`live-data-simulation.md`](live-data-simulation.md).
 
 ---
 

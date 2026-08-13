@@ -247,6 +247,13 @@ class HealthResponse(BaseModel):
     database: str
     gemini: str
     version: str = "3.0.0"
+    # Which warehouse is behind this deploy, and what it thinks "now" is. The
+    # frontend computes its own date windows, so a clock mismatch between the
+    # two shows up as inexplicably empty charts — this makes it a one-request
+    # diagnosis instead. See app/utils/clock.py.
+    warehouse: str = "unknown"
+    clock_mode: str = "unknown"
+    now: str = ""
 
 
 # Rebuild forward refs (TextClassificationResponse used in MessageResponse)

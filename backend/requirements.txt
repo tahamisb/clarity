@@ -12,6 +12,16 @@ pydantic-settings==2.6.1
 python-multipart==0.0.18
 pytest==8.3.4
 pytest-asyncio==0.24.0
+# TestClient, used by scripts/warehouse_parity.py.
+httpx==0.28.1
+
+# ─── Warehouse ──────────────────────────────────────────────────────────────
+# WAREHOUSE_BACKEND=sqlite uses stdlib sqlite3 and needs nothing here.
+# WAREHOUSE_BACKEND=postgres reads the simulated live warehouse (warehouse/).
+# A floor rather than a pin: the binary wheel has to exist for whatever CPython
+# the image brings.
+psycopg[binary]>=3.2,<4
+psycopg-pool>=3.2,<4
 
 # ─── Cancellation prediction ────────────────────────────────────────────────
 # Data lives in data/clarity.db (stdlib sqlite3) — no warehouse client needed.

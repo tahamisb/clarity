@@ -6,6 +6,8 @@ from fastapi import APIRouter
 from app.models.schemas import HealthResponse
 from app.services import db_text
 from app.services import ttl_cache
+from app.services import warehouse
+from app.utils import clock
 from app.services.call_analytics_service import clear_cache as clear_call_cache
 from app.services.cancellation_service import clear_cache as clear_cancel_cache
 from app.services.gemini_service import get_client as get_gemini_client
@@ -51,4 +53,7 @@ async def health():
         status="ok" if db_ok and gemini_status == "ok" else "degraded",
         database="ok" if db_ok else "error",
         gemini=gemini_status,
+        warehouse=warehouse.BACKEND,
+        clock_mode=clock.MODE,
+        now=clock.now_iso(),
     )

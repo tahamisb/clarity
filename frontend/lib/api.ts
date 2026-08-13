@@ -791,3 +791,35 @@ export async function fetchAllCancellationData(range: TimeRange = "all", vertica
     featureImportance, modelInfo, liveQueue,
   }
 }
+
+// ---------------------------------------------------------------------------
+// Data freshness
+// ---------------------------------------------------------------------------
+
+/** How current the warehouse is — see backend/app/routers/live.py. */
+export type LiveStatus = {
+  state: "live" | "lagging" | "stale" | "frozen" | "unknown"
+  clock: string
+  warehouse: string
+  server_now: string
+  orders: { last_at: string | null; age_seconds: number | null; today: number; in_flight: number }
+  messages: { last_at: string | null; age_seconds: number | null; today: number }
+  calls: { last_at: string | null }
+}
+
+/**
+ * Poll target for the freshness badge.
+ *
+ * Returns null rather than throwing on failure: a dashboard must not break
+ * because the liveness probe did, and the badge renders "unknown" — which is
+ * the honest answer when we cannot tell.
+ */
+export async function fetchLiveStatus(): Promise<LiveStatus | null> {
+  try {
+    const res = await fetch(`${BASE}/api/v1/live`, { cache: "no-store" })
+    if (!res.ok) return null
+    return (await res.json()) as LiveStatus
+  } catch {
+    return null
+  }
+}

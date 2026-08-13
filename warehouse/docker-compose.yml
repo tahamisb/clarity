@@ -1,0 +1,133 @@
+# The simulated organisation warehouse.
+#
+# Same file runs in both places — only .env differs:
+#
+#   this machine   POSTGRES_BIND=127.0.0.1:5432   develop against it directly
+#   the VPS        POSTGRES_BIND=                 no published port at all;
+#                                                 reachable only over warehouse_net
+#
+# Product stacks join the network rather than the host:
+#
+#   networks:
+#     warehouse_net:
+#       external: true
+#
+# and connect to host `warehouse`, port 5432.
+
+name: warehouse
+
+services:
+  warehouse:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-warehouse}
+      POSTGRES_USER: ${POSTGRES_USER:-sim_writer}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in warehouse/.env}
+      # Read by sql/000_roles.sh when the cluster is first initialised.
+      CLARITY_READER_PASSWORD: ${CLARITY_READER_PASSWORD:?set CLARITY_READER_PASSWORD in warehouse/.env}
+      NABD_READER_PASSWORD: ${NABD_READER_PASSWORD:-}
+      # Business logic is Qatar-local; storage is UTC. Keep the server in UTC
+      # and convert explicitly, so nothing silently depends on server TZ.
+      TZ: UTC
+      PGTZ: UTC
+    # Runs once, on an empty data directory, in filename order. Wiping the
+    # volume is therefore how you re-apply schema changes (see README).
+    volumes:
+      - ./sql:/docker-entrypoint-initdb.d:ro
+      - warehouse_data:/var/lib/postgresql/data
+    # Loopback only, in BOTH deployments. On the VPS that still lets you reach
+    # psql over SSH while keeping the database off the internet entirely; apps
+    # get to it over warehouse_net, not through a published port. Never change
+    # the left-hand side to 0.0.0.0.
+    ports:
+      - "${POSTGRES_PUBLISH:-127.0.0.1:5432:5432}"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sim_writer} -d ${POSTGRES_DB:-warehouse}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks: [warehouse_net]
+    # Analytics scans over a couple of million rows want more than the 128MB
+    # default shared_buffers; still modest enough for a 2-vCPU VPS.
+    command: >
+      postgres
+      -c shared_buffers=512MB
+      -c work_mem=32MB
+      -c maintenance_work_mem=256MB
+      -c effective_cache_size=1536MB
+      -c random_page_cost=1.1
+
+  # The live ticker — orders arriving, advancing and completing in real time.
+  # This is the service that makes the warehouse a simulation rather than a
+  # dataset. Starts with the stack.
+  #
+  # It is safe to restart at any point: the cursor in sim.tick_cursor means it
+  # resumes where it stopped and backfills the gap, so the charts have no dent
+  # in them.
+  ticker:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      warehouse:
+        condition: service_healthy
+    command:
+      - run
+      - --tick-seconds=${SIM_TICK_SECONDS:-10}
+      - --per-day=${SIM_ORDERS_PER_DAY:-2500}
+      - --retention-days=${SIM_RETENTION_DAYS:-548}
+    environment: &sim_env
+      POSTGRES_DSN: postgresql://${POSTGRES_USER:-sim_writer}:${POSTGRES_PASSWORD}@warehouse:5432/${POSTGRES_DB:-warehouse}
+      SIM_SEED: ${SIM_SEED:-20260728}
+      TZ: UTC
+    networks: [warehouse_net]
+
+  # Scenario control — the demo console. Injects a merchant outage, a courier
+  # shortage, a sentiment storm or a demand spike, and the products react on
+  # their own a minute or two later.
+  #
+  # Deliberately part of the SIMULATOR, not of any product: a product that
+  # knows when the interesting data is coming is being staged, not
+  # demonstrated. Clarity sees only orders and complaints arriving.
+  #
+  # Bound to loopback. There is no authentication, so it must never be
+  # published or proxied — treat the port as internal-only.
+  control:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      warehouse:
+        condition: service_healthy
+    command: [control, --port=8080]
+    environment: *sim_env
+    ports:
+      - "${CONTROL_PUBLISH:-127.0.0.1:8090:8080}"
+    networks: [warehouse_net]
+
+  # Seeder / loader / verifier. Behind a profile so it never starts on its own
+  # — run it on demand:
+  #
+  #   docker compose run --rm simulator seed --to today --per-day 2500
+  #   docker compose run --rm simulator load-sqlite /snapshot/clarity.db
+  #   docker compose run --rm simulator verify
+  #   docker compose run --rm simulator status
+  simulator:
+    build: .
+    profiles: [tools]
+    depends_on:
+      warehouse:
+        condition: service_healthy
+    environment: *sim_env
+    volumes:
+      # The legacy SQLite snapshot, for `load-sqlite`. Read-only: this is the
+      # reference dataset the Phase 1 backend diff is measured against.
+      - ../backend/data:/snapshot:ro
+    networks: [warehouse_net]
+
+volumes:
+  warehouse_data:
+
+networks:
+  warehouse_net:
+    name: warehouse_net

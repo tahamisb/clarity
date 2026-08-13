@@ -149,6 +149,37 @@ from the environment at runtime, so switching domains only needs a restart.
 The `SMTP_*` values are plain runtime environment, so changing them needs only
 `docker compose up -d backend` — no rebuild.
 
+## Running against the simulated live warehouse
+
+By default the backend reads the frozen SQLite snapshot baked into its image.
+To point it at the simulated live Postgres warehouse instead — the thing that
+demonstrates how Clarity behaves on real, arriving data — start the warehouse
+stack first, then bring the app up with the overlay:
+
+```bash
+cd /opt/warehouse
+cp .env.example .env            # fill in three passwords
+docker compose up -d
+docker compose run --rm simulator seed --to today --per-day 2500
+
+cd /opt/clarity
+# CLARITY_READER_PASSWORD in this .env must match warehouse/.env
+docker compose -f docker-compose.yml -f docker-compose.warehouse.yml up -d
+```
+
+The overlay only sets `WAREHOUSE_BACKEND=postgres`, a `DATABASE_URL`, and joins
+`warehouse_net`. Drop the `-f` flags to go back to the snapshot — worth knowing
+before a presentation, since it is the offline fallback if the warehouse is
+down. Confirm which one is live:
+
+```bash
+docker compose logs backend | grep -i "warehouse"
+```
+
+Postgres publishes no port to the internet; the app reaches it over the Docker
+network. Full detail in [`warehouse/README.md`](warehouse/README.md) and
+[`docs/live-data-simulation.md`](docs/live-data-simulation.md).
+
 ## Adding a second project to this VPS
 
 Subdomains are free and unlimited. Give the new project its own compose stack on

@@ -1,8 +1,9 @@
 """
 Pillar 02 data access — support messages, Gemini classifications and labels.
 
-Reads the local SQLite warehouse (`data/clarity.db`); see `local_db` for the
-BigQuery-builtin shims the rewritten queries rely on.
+Reads the warehouse through `warehouse.py` — SQLite snapshot or simulated
+Postgres, same SQL either way; see that module for the shims and the two
+backends' few genuine differences.
 
 Tables:
   messages         — ingested messages (PII-redacted)
@@ -15,11 +16,10 @@ import asyncio
 import logging
 from typing import Optional
 
-from app.services import local_db as db
-from app.services.local_db import countif, hour_of, hours_between
+from app.services import warehouse as db
+from app.services.warehouse import countif, hour_of, hours_between
 from app.services.ttl_cache import ttl_cache
 from app.services.verticals import merchant_cte, vertical_case
-from app.utils.clock import SQL_NOW
 
 logger = logging.getLogger(__name__)
 
@@ -332,7 +332,7 @@ def _top_triggers_sync(
         JOIN messages m ON c.message_id = m.message_id
         {_MV_JOIN}
         WHERE {" AND ".join(conditions)}
-        GROUP BY 1 ORDER BY cnt DESC LIMIT 5
+        GROUP BY 1 ORDER BY cnt DESC, 1 LIMIT 5
     """, params)
     for r in rows:
         r["top_merchants"] = db.split_agg(r["top_merchants"])[:5]
@@ -455,7 +455,7 @@ def _intent_distribution_sync(
         FROM classifications c
         JOIN messages m ON c.message_id = m.message_id
         {_MV_JOIN if vertical else ""}
-        {where_sql} GROUP BY 1 ORDER BY cnt DESC
+        {where_sql} GROUP BY 1 ORDER BY cnt DESC, 1
     """, params)
 
 
@@ -481,7 +481,7 @@ def _merchant_sentiment_sync(
         JOIN messages m ON c.message_id = m.message_id
         {_MV_JOIN}
         WHERE {" AND ".join(conditions)}
-        GROUP BY 1, 2 ORDER BY total DESC
+        GROUP BY 1, 2 ORDER BY total DESC, 1, 2
     """, {**_date_params(start, end), **_vertical_param(vertical)})
 
 
@@ -506,7 +506,7 @@ def _zone_heatmap_sync(
         JOIN messages m ON c.message_id = m.message_id
         {_MV_JOIN}
         WHERE {" AND ".join(conditions)}
-        GROUP BY 1 ORDER BY negative DESC
+        GROUP BY 1 ORDER BY negative DESC, 1
     """, {**_date_params(start, end), **_vertical_param(vertical)})
 
 
@@ -534,7 +534,7 @@ def _negative_customers_sync(
         JOIN messages m ON c.message_id = m.message_id
         {_MV_JOIN if vertical else ""}
         WHERE {" AND ".join(conditions)}
-        GROUP BY 1 ORDER BY negative_messages DESC
+        GROUP BY 1 ORDER BY negative_messages DESC, 1
     """, {**_date_params(start, end), **_vertical_param(vertical)})
 
 
@@ -545,7 +545,9 @@ async def query_negative_customers(
 
 
 # Handling time = closed_at − created_at, or frozen-now − created_at while open.
-_DUR_H = hours_between(f"COALESCE(m.closed_at, {SQL_NOW})", "m.created_at")
+# db.sql_now() is a SQL expression, not a Python literal: with a live clock
+# an import-time constant would freeze SLA ages at process start.
+_DUR_H = hours_between(f"COALESCE(m.closed_at, {db.sql_now()})", "m.created_at")
 _BREACH = f"{_DUR_H} > (CASE WHEN m.source_channel = 'ticket' THEN :general_sla ELSE :chat_sla END)"
 
 
@@ -575,7 +577,10 @@ def _sla_breaches_sync(
         FROM messages m
         {_MV_JOIN if vertical else ""}
         WHERE {" AND ".join(conds)}
-        ORDER BY hours DESC
+        -- Ordered by the UNROUNDED duration: `hours` is rounded to 1dp,
+        -- and the two engines can round a boundary value differently,
+        -- which would reshuffle the list rather than just shift a digit.
+        ORDER BY {_DUR_H} DESC, m.message_id
         LIMIT :lim
     """, params)
 
@@ -640,7 +645,7 @@ def _message_overview_sync(
         JOIN messages m ON c.message_id = m.message_id
         {_MV_JOIN if vertical else ""}
         {where_sql}
-        GROUP BY 1 HAVING breaches > 0 ORDER BY breaches DESC
+        GROUP BY 1 HAVING {countif(_BREACH)} > 0 ORDER BY breaches DESC, 1
     """, params)
     row["sla_breaches"] = [{"channel": r["channel"], "count": int(r["breaches"])} for r in sla]
     return row

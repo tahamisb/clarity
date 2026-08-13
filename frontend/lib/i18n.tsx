@@ -403,6 +403,17 @@ export const translations: Dict = {
   "range.apply": { en: "Apply", ar: "تطبيق" },
 
   // — Refresh status ——————————————————————————————————————————————————————
+  // Data freshness — how current the WAREHOUSE is, as distinct from when this
+  // browser last fetched. A stalled pipeline is invisible otherwise: every
+  // request still succeeds and the charts just quietly stop moving.
+  "live.live": { en: "Live", ar: "مباشر" },
+  "live.lagging": { en: "Lagging", ar: "متأخر" },
+  "live.stale": { en: "Stale data", ar: "بيانات قديمة" },
+  "live.frozen": { en: "Fixed dataset", ar: "بيانات ثابتة" },
+  "live.unknown": { en: "Unknown", ar: "غير معروف" },
+  "live.dataAge": { en: "newest order {ago}", ar: "أحدث طلب {ago}" },
+  "live.ordersToday": { en: "{n} orders today", ar: "{n} طلب اليوم" },
+  "live.inFlight": { en: "{n} in flight", ar: "{n} قيد التنفيذ" },
   "refresh.autoRefresh": { en: "Auto-refresh", ar: "تحديث تلقائي" },
   "refresh.every": { en: "every {label}", ar: "كل {label}" },
   "refresh.offWord": { en: "off", ar: "معطّل" },

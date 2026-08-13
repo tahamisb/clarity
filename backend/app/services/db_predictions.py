@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import logging
 
-from app.services import local_db as db
+from app.services import warehouse as db
 from app.utils.helpers import utcnow_iso
 
 logger = logging.getLogger(__name__)
@@ -37,7 +37,10 @@ def save_predictions(preds: list[dict]) -> None:
             "engine": p.get("engine", "model"),
             "probability": p.get("probability"),
             "risk_level": p.get("risk_level"),
-            "flagged": int(bool(p.get("flagged"))),
+            # A real bool, not int(bool(...)): SQLite stores it as 0/1 either
+            # way, but Postgres will not implicitly coerce an integer into a
+            # boolean column and the insert fails outright.
+            "flagged": bool(p.get("flagged")),
             "threshold": p.get("threshold"),
             "top_risk_factors": json.dumps(p.get("top_risk_factors") or [], default=str),
             "gemini_explanation": p.get("gemini_explanation"),

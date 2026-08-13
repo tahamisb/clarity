@@ -20,8 +20,9 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.routers import call_analytics, calls, health, messages, sentiment, text_analytics, chat_analytics, waitlist
-from app.services.local_db import DB_PATH, ping as db_ping
+from app.routers import call_analytics, calls, health, live, messages, sentiment, text_analytics, chat_analytics, waitlist
+from app.services.warehouse import available as db_available, describe as db_describe, ping as db_ping
+from app.utils import clock as _clock
 
 settings = get_settings()
 
@@ -34,14 +35,25 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Cache warmer — re-runs the default-filter dashboard queries every 4 minutes
-# (just inside the 5-min TTLs) so no user ever pays a cold hit. Gated on recent
-# traffic: an idle server warms once at startup then stops re-querying.
+# Cache warmer — re-runs the default-filter dashboard queries so no user ever
+# pays a cold hit. Gated on recent traffic: an idle server warms once at
+# startup then stops re-querying.
+#
+# The interval tracks the cache TTL, which is no longer a single number: views
+# covering today expire in seconds against a live warehouse (see ttl_cache).
+# Warming every 4 minutes would then re-run every aggregate long after the
+# entries had already expired and been repopulated by real traffic — so the
+# warmer stays on the historical cadence and the live views ride actual
+# requests, which arrive every few seconds anyway once a dashboard is open.
 # ---------------------------------------------------------------------------
 
 _WARM_EVERY_S = 240
 _IDLE_AFTER_S = 600
 _last_request_at = time.time()
+
+
+def _month_start() -> str:
+    return _clock.today().replace(day=1).isoformat()
 
 
 async def _warm_cycle() -> None:
@@ -62,8 +74,10 @@ async def _warm_cycle() -> None:
         # Call Intelligence page
         calls_svc.get_calls(1, 1000),
         calls_svc.get_analytics_summary(),
-        # CX dashboard contact-rate (pinned to the only month with order data)
-        get_contact_rate("2026-06-01", "2026-06-30"),
+        # CX dashboard contact-rate, month to date. Was pinned to June 2026 —
+        # "the only month with order data" — which stops being true the moment
+        # the warehouse is live, and would then warm a window nobody opens.
+        get_contact_rate(_month_start(), _clock.today().isoformat()),
     ]
     try:
         from app.services import cancellation_service as cancel_svc
@@ -107,16 +121,26 @@ async def _warm_loop() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    if not DB_PATH.exists():
+    if not db_available():
         logger.error(
-            "Local warehouse missing at %s — run: python scripts/generate_mock_db.py", DB_PATH
+            "%s is not reachable — for SQLite run: python scripts/generate_mock_db.py; "
+            "for Postgres check DATABASE_URL and that warehouse/ is up",
+            db_describe(),
         )
     elif db_ping():
-        logger.info("Local warehouse ready at %s", DB_PATH)
+        logger.info("%s ready — clock is %s", db_describe(), _clock.describe())
     warmer = asyncio.create_task(_warm_loop())  # don't block startup on the first warm
+
+    # The AI pipeline against arriving rows: classification and cancellation
+    # scoring. No-ops on the frozen snapshot, where nothing new ever arrives.
+    from app.services import live_pipeline
+    background: list = [warmer]
+    live_pipeline.start(background)
+
     logger.info("Clarity Unified API ready on port %d", settings.app_port)
     yield
-    warmer.cancel()
+    for task in background:
+        task.cancel()
 
 
 app = FastAPI(
@@ -155,6 +179,9 @@ app.include_router(sentiment.router)
 app.include_router(text_analytics.router)
 app.include_router(chat_analytics.router)
 app.include_router(waitlist.router)
+# Data freshness — polled by the topbar so a stalled pipeline is visible
+# instead of showing yesterday's numbers as though they were current.
+app.include_router(live.router)
 
 # Pillar 03 — cancellation prediction (ML + Gemini)
 # Imported defensively: the cancellation feature pulls in ML libraries

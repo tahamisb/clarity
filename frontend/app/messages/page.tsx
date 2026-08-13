@@ -24,7 +24,7 @@ import { filterByRange, type TimeRange } from "@/lib/time-range"
 import { useT, useTV } from "@/lib/i18n"
 import { type SupportMessage, type TimeOfDay } from "@/lib/mock-messages"
 import type { Sentiment } from "@/lib/clarity-data"
-import { now } from "@/lib/frozen-clock"
+import { now } from "@/lib/clock"
 import {
   fetchAllMessagesData,
   clearServerCache,

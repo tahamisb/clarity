@@ -2,10 +2,21 @@
 Cancellation predictor — model loading, inference, SHAP explanations, and
 Gemini-enhanced analysis.
 
-The ML model + feature pipeline are loaded lazily from `artifacts/` when present.
-They aren't shipped with the local dataset, so scoring falls back to the Gemini
-engine — and the warehouse pre-seeds a prediction for every live order, so the
-risk queue serves entirely from `cancellation_predictions` without any LLM calls.
+Three engines, resolved by `_resolve_engine`:
+
+  **model**     the trained gradient-boosted model in `artifacts/`, with SHAP
+                explanations. Not shipped with the repository.
+  **scorecard** a transparent log-odds score built from rates the warehouse
+                already knows — the merchant's and zone's recent cancellation
+                rates, the hour, basket size, customer type. Free, instant,
+                always available, and what `auto` uses when there is no
+                trained model.
+  **gemini**    an LLM judgement per order. Only ever used when asked for
+                explicitly: escalating to a paid API because an artifact is
+                missing is not a decision a background worker should make.
+
+Predictions are persisted to `cancellation_predictions` and read back through
+a cache, so the live queue re-scores only orders it has not seen.
 """
 
 from __future__ import annotations
@@ -13,6 +24,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import math
 import warnings
 from pathlib import Path
 from typing import Any, Optional
@@ -27,8 +39,8 @@ import pandas as pd
 import re
 
 from app.services import db_predictions
-from app.services import local_db as db
-from app.services.local_db import countif, safe_divide
+from app.services import warehouse as db
+from app.services.warehouse import countif, safe_divide
 from app.services.gemini_service import call_with_retry
 from app.services.ttl_cache import ttl_cache
 from app.utils import feature_engineering as fe
@@ -400,16 +412,136 @@ async def predict_one_gemini(order: dict) -> dict:
 
 
 def _resolve_engine(engine: str) -> str:
-    """Decide which engine actually runs. 'auto' uses the model if trained, else Gemini."""
+    """Decide which engine actually runs.
+
+    `auto` prefers the trained model, then the scorecard, and never silently
+    escalates to Gemini: reaching for a paid API because an artifact is missing
+    is not a decision a background worker should make on its own. Ask for
+    `gemini` explicitly to get it.
+    """
     engine = (engine or "auto").lower()
     if engine == "model":
         if not _load():
             raise ModelUnavailable()
         return "model"
-    if engine == "gemini":
-        return "gemini"
-    # auto
-    return "model" if _load() else "gemini"
+    if engine in ("gemini", "scorecard"):
+        return engine
+    return "model" if _load() else "scorecard"
+
+
+# ---------------------------------------------------------------------------
+# Scorecard engine
+# ---------------------------------------------------------------------------
+
+# Weights for the log-odds scorecard below. Deliberately few and readable: this
+# is a transparent baseline, not a fitted model pretending to be one.
+_SCORECARD_BASE_RATE = 0.09          # platform-wide cancellation rate
+_W_VENDOR_RATE = 3.2                 # merchant's own recent cancel rate dominates
+_W_ZONE_RATE = 1.6
+_W_LATE_NIGHT = 0.45                 # thin courier coverage after 22:00
+_W_LARGE_BASKET = 0.30               # big baskets get shorted more often
+_W_NEW_CUSTOMER = 0.25
+_W_PRO_USER = -0.35                  # subscribers complete more of what they start
+
+
+def _logit(p: float) -> float:
+    p = min(max(p, 1e-4), 1 - 1e-4)
+    return math.log(p / (1 - p))
+
+
+def _scorecard_score(order: dict, threshold: float) -> dict:
+    """A transparent, warehouse-derived risk score.
+
+    Exists because the repository ships no trained model: without it the live
+    risk queue is permanently empty unless someone supplies a Gemini key, and
+    an empty queue makes the whole cancellation feature look broken.
+
+    It is a real empirical model, not a peek at the answer — every input is a
+    rate observed in the warehouse or a property of the order, the same
+    features the trained model consumes. It is labelled `scorecard` everywhere
+    so it is never mistaken for the fitted one.
+    """
+    vendor_rate = order.get("vendor_cancel_rate_30d")
+    zone_rate = order.get("zone_cancel_rate_30d")
+    base = _SCORECARD_BASE_RATE
+
+    score = _logit(base)
+    factors: list[dict] = []
+
+    if vendor_rate is not None and not pd.isna(vendor_rate):
+        delta = _W_VENDOR_RATE * (float(vendor_rate) - base)
+        score += delta
+        factors.append({
+            "feature": "vendor_cancel_rate_30d",
+            "value": f"{float(vendor_rate):.1%} of this merchant's recent orders were cancelled",
+            "contribution": round(delta, 3),
+            "direction": "increases_risk" if delta > 0 else "decreases_risk",
+        })
+    if zone_rate is not None and not pd.isna(zone_rate):
+        delta = _W_ZONE_RATE * (float(zone_rate) - base)
+        score += delta
+        factors.append({
+            "feature": "zone_cancel_rate_30d",
+            "value": f"{float(zone_rate):.1%} cancellation rate in {order.get('zone_name') or 'this zone'}",
+            "contribution": round(delta, 3),
+            "direction": "increases_risk" if delta > 0 else "decreases_risk",
+        })
+
+    hour = order.get("order_hour")
+    if hour is None:
+        raw = str(order.get("order_placement_time") or "")[:2]
+        hour = int(raw) if raw.isdigit() else None
+    if hour is not None and (hour >= 22 or hour < 6):
+        score += _W_LATE_NIGHT
+        factors.append({
+            "feature": "hour_of_day", "value": f"Placed at {hour:02d}:00 — thin courier coverage",
+            "contribution": _W_LATE_NIGHT, "direction": "increases_risk",
+        })
+
+    value = order.get("total_order_value")
+    if value is not None and not pd.isna(value) and float(value) > 220:
+        score += _W_LARGE_BASKET
+        factors.append({
+            "feature": "total_order_value",
+            "value": f"QAR {float(value):.0f} basket — larger orders get shorted more often",
+            "contribution": _W_LARGE_BASKET, "direction": "increases_risk",
+        })
+    if order.get("new_customer"):
+        score += _W_NEW_CUSTOMER
+        factors.append({
+            "feature": "is_new_customer", "value": "First-time customer",
+            "contribution": _W_NEW_CUSTOMER, "direction": "increases_risk",
+        })
+    if order.get("is_pro_user"):
+        score += _W_PRO_USER
+        factors.append({
+            "feature": "is_pro_user", "value": "Pro subscriber — historically completes orders",
+            "contribution": _W_PRO_USER, "direction": "decreases_risk",
+        })
+
+    probability = round(1 / (1 + math.exp(-score)), 4)
+    factors.sort(key=lambda f: abs(f["contribution"]), reverse=True)
+    top = factors[:_TOP_FACTORS]
+    driver = top[0]["feature"].replace("_", " ") if top else "the platform baseline"
+
+    return {
+        "order_id": str(order.get("id")) if order.get("id") is not None else None,
+        "engine": "scorecard",
+        "probability": probability,
+        "risk_level": "high" if probability >= 0.5 else ("medium" if probability >= 0.3 else "low"),
+        "flagged": probability >= threshold,
+        "threshold": threshold,
+        "top_risk_factors": top,
+        "gemini_explanation": (
+            f"Scored {probability:.0%} by the warehouse scorecard, driven mainly by {driver}."
+        ),
+        "recommended_action": (
+            "Call the vendor to confirm stock before dispatch."
+            if probability >= 0.5 else
+            "Send a proactive ETA update." if probability >= 0.3 else
+            "No action needed — monitor."
+        ),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -479,10 +611,6 @@ async def live_queue(limit: int = 50, engine: str = "auto") -> dict:
     threshold = _threshold()
     empty = {"count": 0, "threshold": threshold, "engine": "none", "generated_at": utcnow_iso(), "orders": []}
 
-    # On 'auto' with no trained model, don't silently mass-score with Gemini.
-    if engine == "auto" and not _load():
-        return empty
-
     used = _resolve_engine(engine)  # raises ModelUnavailable only when engine == "model"
     loop = asyncio.get_running_loop()
     orders = await loop.run_in_executor(None, _fetch_live_orders_sync, limit)
@@ -512,6 +640,13 @@ async def live_queue(limit: int = 50, engine: str = "auto") -> dict:
             if len(uncached) > len(batch):
                 logger.info("Live queue: scored %d new orders, %d more will fill in on the next load.",
                             len(batch), len(uncached) - len(batch))
+        elif used == "scorecard":
+            # Needs the same rolling rates the model would use; one batched
+            # history lookup covers the whole page.
+            df = await loop.run_in_executor(None, _fill_history, _orders_to_frame(uncached))
+            enriched = [{**uncached[i], **df.iloc[i].to_dict()} for i in range(len(df))]
+            preds = [_scorecard_score(o, threshold) for o in enriched]
+            new_preds = [_attach_context(p, o) for p, o in zip(preds, uncached)]
         else:
             preds = await loop.run_in_executor(None, _score_frame, _orders_to_frame(uncached))
             for p in preds:

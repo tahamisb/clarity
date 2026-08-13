@@ -1,0 +1,5 @@
+# Floor rather than a pin: the binary wheel has to exist for whatever CPython
+# the environment brings (3.2.3 has none for 3.14, which is what Homebrew
+# installs today), and every 3.x here is API-compatible for what sim/ uses.
+psycopg[binary]>=3.2,<4
+

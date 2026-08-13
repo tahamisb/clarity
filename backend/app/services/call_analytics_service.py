@@ -8,8 +8,9 @@ import logging
 import re
 import time
 
-from app.services import local_db as db
-from app.services.local_db import countif, safe_divide
+from app.services import warehouse as db
+from app.services import ttl_cache
+from app.services.warehouse import countif, safe_divide
 from app.services.verticals import merchant_cte, vertical_case
 
 logger = logging.getLogger(__name__)
@@ -30,13 +31,15 @@ _MV_WITH = f"WITH {merchant_cte('vendor_kpi')}\n"
 # ---------------------------------------------------------------------------
 
 _CACHE: dict[str, tuple[float, object]] = {}
-_CACHE_TTL_S = 300
 
 
 async def _cached(key: str, make_coro):
+    """Every view cached here is unbounded (no date filter), so all of them
+    include today and take the live TTL against a live warehouse. Under the
+    frozen clock ttl_for() returns the old 5 minutes."""
     now = time.time()
     hit = _CACHE.get(key)
-    if hit and now - hit[0] < _CACHE_TTL_S:
+    if hit and now - hit[0] < ttl_cache.ttl_for({}):
         return hit[1]
     value = await make_coro()
     _CACHE[key] = (now, value)
@@ -176,7 +179,7 @@ def _topics_sql(order_by: str) -> str:
           ROUND(AVG(ca.sentiment_confidence), 3) AS avg_confidence,
           mode_value({_VERTICAL}) AS top_vertical
         FROM call_analysis ca {_CALL_MV_JOIN}
-        GROUP BY ca.primary_intent ORDER BY {order_by} LIMIT 10
+        GROUP BY ca.primary_intent ORDER BY {order_by}, ca.primary_intent LIMIT 10
     """
 
 
@@ -196,7 +199,7 @@ def _summary_sync() -> dict:
           {countif("sentiment = 'neutral'")}  AS neutral_count,
           {countif("sentiment = 'negative'")} AS negative_count,
           ROUND(AVG(sentiment_confidence), 3) AS avg_confidence
-        FROM call_analysis GROUP BY primary_intent ORDER BY total DESC
+        FROM call_analysis GROUP BY primary_intent ORDER BY total DESC, primary_intent
     """)
 
     trend = db.query(f"""
@@ -237,7 +240,7 @@ def _area_insights_sync() -> dict:
           {countif("ca.primary_intent = 'refund_request'")}  AS refund_requests
         FROM call_analysis ca, json_each(ca.areas) AS a
         WHERE a.value IS NOT NULL AND TRIM(a.value) != ''
-        GROUP BY area ORDER BY total_calls DESC LIMIT 20
+        GROUP BY area ORDER BY total_calls DESC, area LIMIT 20
     """)
 
     from_orders = []
@@ -254,7 +257,7 @@ def _area_insights_sync() -> dict:
             FROM call_analysis ca, json_each(ca.order_ids) AS o
             JOIN vendor_kpi vk ON CAST(vk.id AS TEXT) = o.value
             WHERE vk.customer_zone IS NOT NULL AND TRIM(vk.customer_zone) != ''
-            GROUP BY vk.customer_zone ORDER BY support_calls DESC LIMIT 20
+            GROUP BY vk.customer_zone ORDER BY support_calls DESC, vk.customer_zone LIMIT 20
         """)
     except Exception as exc:
         logger.warning("Zone enrichment query skipped: %s", exc)
@@ -279,7 +282,7 @@ def _restaurant_insights_sync() -> dict:
           {countif("ca.primary_intent = 'delivery_issue'")} AS delivery_issues
         FROM call_analysis ca, json_each(ca.restaurant_names) AS r
         WHERE r.value IS NOT NULL AND TRIM(r.value) != ''
-        GROUP BY restaurant ORDER BY total_calls DESC LIMIT 20
+        GROUP BY restaurant ORDER BY total_calls DESC, restaurant LIMIT 20
     """)
 
     from_orders = []
@@ -297,7 +300,7 @@ def _restaurant_insights_sync() -> dict:
             FROM call_analysis ca, json_each(ca.order_ids) AS o
             JOIN vendor_kpi vk ON CAST(vk.id AS TEXT) = o.value
             WHERE vk.restaurant_name IS NOT NULL AND TRIM(vk.restaurant_name) != ''
-            GROUP BY vk.restaurant_name, vk.cuisine ORDER BY support_calls DESC LIMIT 20
+            GROUP BY vk.restaurant_name, vk.cuisine ORDER BY support_calls DESC, vk.restaurant_name LIMIT 20
         """)
     except Exception as exc:
         logger.warning("Restaurant enrichment query skipped: %s", exc)

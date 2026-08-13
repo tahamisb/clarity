@@ -19,10 +19,11 @@ import logging
 import time
 from pathlib import Path
 
-from app.services import local_db as db
+from app.services import warehouse as db
+from app.services import ttl_cache
 from app.services.chat_service import chat_with_data
 from app.services.gemini_service import call_with_retry
-from app.services.local_db import countif, safe_divide
+from app.services.warehouse import countif, safe_divide
 from app.services.verticals import normalize, vertical_case, vertical_pred
 from app.utils.helpers import extract_json, utcnow_iso
 
@@ -47,11 +48,17 @@ def _date_pred(start: str | None, end: str | None, col: str = "order_placement_d
     existing WHERE clause. Returns "" when unbounded. `start`/`end` are validated
     as YYYY-MM-DD by the router before reaching here, so interpolation is safe.
     """
+    # Compared as plain ISO strings rather than through date(): the column is
+    # already 'YYYY-MM-DD', so string ordering is date ordering. That is also
+    # the only spelling that works on both engines — Postgres reads `date('x')`
+    # on a bare literal as a cast to its `date` type, which then will not
+    # compare against a text column — and it leaves the index usable, where
+    # wrapping the column in a function would not.
     parts: list[str] = []
     if start:
-        parts.append(f"{col} >= date('{start}')")
+        parts.append(f"{col} >= '{start}'")
     if end:
-        parts.append(f"{col} <= date('{end}')")
+        parts.append(f"{col} <= '{end}'")
     return (" AND " + " AND ".join(parts)) if parts else ""
 
 
@@ -107,13 +114,21 @@ def _run(sql: str) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 _CACHE: dict[str, tuple[float, object]] = {}
-_CACHE_TTL_S = 300
 
 
 async def _cached(key: str, make_coro) -> object:
+    """Cache by key, with the TTL set by whether the window includes today.
+
+    The key is `base:start:end:vertical`, so the window is already in it — the
+    end date is parsed back out rather than threaded through all fifteen
+    wrappers. Against a live warehouse a flat 5-minute TTL freezes the
+    dashboard; see ttl_cache for the reasoning.
+    """
+    parts = key.split(":")
+    ttl = ttl_cache.ttl_for({"end": parts[2] if len(parts) > 2 else ""})
     now = time.time()
     hit = _CACHE.get(key)
-    if hit and now - hit[0] < _CACHE_TTL_S:
+    if hit and now - hit[0] < ttl:
         return hit[1]
     value = await make_coro()
     _CACHE[key] = (now, value)
@@ -149,6 +164,9 @@ def _trend_sync(start: str | None = None, end: str | None = None, vertical: str 
 
 def _by_merchant_sync(start: str | None = None, end: str | None = None, vertical: str | None = None) -> dict:
     pred = _preds(start, end, vertical)
+    # HAVING repeats COUNT(*) rather than naming the total_orders alias:
+    # Postgres does not expose SELECT aliases to HAVING, and SQLite's
+    # leniency there is the outlier. Same in the other four HAVINGs below.
     base = f"""
         SELECT restaurant_name,
           {_TOP_PLATFORM},
@@ -159,10 +177,10 @@ def _by_merchant_sync(start: str | None = None, end: str | None = None, vertical
         FROM {_T}
         WHERE restaurant_name IS NOT NULL AND TRIM(restaurant_name) != ''{pred}
         GROUP BY restaurant_name
-        HAVING total_orders >= 30
+        HAVING COUNT(*) >= 30
     """
-    by_volume = _with_vertical(_run(f"{base} ORDER BY cancelled DESC LIMIT 20"))
-    by_rate = _with_vertical(_run(f"{base} ORDER BY cancel_rate_pct DESC, total_orders DESC LIMIT 20"))
+    by_volume = _with_vertical(_run(f"{base} ORDER BY cancelled DESC, restaurant_name LIMIT 20"))
+    by_rate = _with_vertical(_run(f"{base} ORDER BY cancel_rate_pct DESC, total_orders DESC, restaurant_name LIMIT 20"))
     return {"by_volume": by_volume, "by_rate": by_rate}
 
 
@@ -179,8 +197,8 @@ def _by_zone_sync(start: str | None = None, end: str | None = None, vertical: st
             FROM {_T}
             WHERE {col} IS NOT NULL AND TRIM(CAST({col} AS TEXT)) != ''{pred}
             GROUP BY zone
-            HAVING total_orders >= 20
-            ORDER BY total_orders DESC LIMIT 30
+            HAVING COUNT(*) >= 20
+            ORDER BY total_orders DESC, zone LIMIT 30
         """))
     return {"by_zone_name": q("zone_name"), "by_customer_zone": q("customer_zone")}
 
@@ -199,7 +217,7 @@ def _by_time_sync(start: str | None = None, end: str | None = None, vertical: st
           {_RATE_PCT}    AS cancel_rate_pct
         FROM bucketed
         GROUP BY time_bucket
-        ORDER BY cancel_rate_pct DESC
+        ORDER BY cancel_rate_pct DESC, time_bucket
     """)
 
 
@@ -223,7 +241,7 @@ def _by_order_size_sync(start: str | None = None, end: str | None = None, vertic
     return _run(f"""
         WITH q AS (
           SELECT total_order_value, order_status,
-            NTILE(4) OVER (ORDER BY total_order_value) AS quartile
+            NTILE(4) OVER (ORDER BY total_order_value, id) AS quartile
           FROM {_T}
           WHERE total_order_value IS NOT NULL{pred}
         )
@@ -263,7 +281,7 @@ def _by_reason_sync(start: str | None = None, end: str | None = None, vertical: 
         FROM {_T}
         WHERE {_CANCELLED}{pred}
         GROUP BY reason, cancelled_by
-        ORDER BY cancellations DESC
+        ORDER BY cancellations DESC, 1
         LIMIT 20
     """)
 
@@ -292,13 +310,13 @@ def _crosstabs_sync(start: str | None = None, end: str | None = None, vertical: 
           FROM agg
           GROUP BY zone_name
           HAVING SUM(total_orders) >= 100
-          ORDER BY zone_rate DESC
+          ORDER BY zone_rate DESC, zone_name
           LIMIT 6
         )
         SELECT a.zone_name, a.time_bucket, a.total_orders, a.cancelled, a.cancel_rate_pct
         FROM agg a
         JOIN top_zones t ON a.zone_name = t.zone_name
-        ORDER BY t.zone_rate DESC, a.time_bucket
+        ORDER BY t.zone_rate DESC, t.zone_name, a.time_bucket
     """)
     # Top 5 vendors by cancelled volume for EACH weekday — feeds the
     # "Cancellation Rate by Day" hover ("which vendors drive this day").
@@ -311,14 +329,14 @@ def _crosstabs_sync(start: str | None = None, end: str | None = None, vertical: 
           FROM {_T}
           WHERE order_placement_date IS NOT NULL AND restaurant_name IS NOT NULL AND TRIM(restaurant_name) != ''{pred}
           GROUP BY restaurant_name, day_of_week
-          HAVING total_orders >= 20
+          HAVING COUNT(*) >= 20
         ),
         ranked AS (
-          SELECT *, ROW_NUMBER() OVER (PARTITION BY day_of_week ORDER BY cancelled DESC) AS rn FROM agg
+          SELECT *, ROW_NUMBER() OVER (PARTITION BY day_of_week ORDER BY cancelled DESC, restaurant_name) AS rn FROM agg
         )
         SELECT restaurant_name, day_of_week, total_orders, cancelled, cancel_rate_pct
         FROM ranked WHERE rn <= 5
-        ORDER BY day_of_week, cancelled DESC
+        ORDER BY day_of_week, cancelled DESC, restaurant_name
     """)
     # Top 5 vendors by cancelled volume for EACH zone — feeds the
     # "Cancellation Rate by Zone" hover ("which vendors drive this zone").
@@ -332,14 +350,14 @@ def _crosstabs_sync(start: str | None = None, end: str | None = None, vertical: 
           WHERE zone_name IS NOT NULL AND TRIM(zone_name) != ''
             AND restaurant_name IS NOT NULL AND TRIM(restaurant_name) != ''{pred}
           GROUP BY restaurant_name, zone_name
-          HAVING total_orders >= 20
+          HAVING COUNT(*) >= 20
         ),
         ranked AS (
-          SELECT *, ROW_NUMBER() OVER (PARTITION BY zone_name ORDER BY cancelled DESC) AS rn FROM agg
+          SELECT *, ROW_NUMBER() OVER (PARTITION BY zone_name ORDER BY cancelled DESC, restaurant_name) AS rn FROM agg
         )
         SELECT restaurant_name, zone_name, total_orders, cancelled, cancel_rate_pct
         FROM ranked WHERE rn <= 5
-        ORDER BY zone_name, cancelled DESC
+        ORDER BY zone_name, cancelled DESC, restaurant_name
     """)
     return {"zone_x_time": zone_time, "merchant_x_dow": merchant_dow, "merchant_x_zone": merchant_zone}
 
@@ -358,7 +376,7 @@ def _by_vertical_sync(start: str | None = None, end: str | None = None) -> list[
         WHERE order_placement_date IS NOT NULL
           AND {vertical_case('platform_name')} IS NOT NULL{pred}
         GROUP BY vertical
-        ORDER BY total_orders DESC
+        ORDER BY total_orders DESC, 1
     """)
     # Top contributing merchants per vertical. Rules from ops:
     #  1. Vendors averaging > 5 cancelled orders per active day qualify. But for a
@@ -390,13 +408,13 @@ def _by_vertical_sync(start: str | None = None, end: str | None = None) -> list[
           FROM agg
         ),
         ranked AS (
-          SELECT *, ROW_NUMBER() OVER (PARTITION BY vertical ORDER BY cancelled DESC) AS rn
+          SELECT *, ROW_NUMBER() OVER (PARTITION BY vertical ORDER BY cancelled DESC, restaurant_name) AS rn
           FROM flagged
           WHERE cancelled > 0 AND (qualifies OR vertical_has_qualifier = 0)
         )
         SELECT vertical, restaurant_name, cancelled, cancel_rate_pct
         FROM ranked WHERE rn <= 5
-        ORDER BY vertical, cancelled DESC
+        ORDER BY vertical, cancelled DESC, restaurant_name
     """)
     # Denominator = the vertical's own total orders, so each merchant's share is a
     # slice of that vertical's cancel rate (all merchants' shares sum to it).

@@ -1,0 +1,49 @@
+# Overlay: point Clarity at the simulated live warehouse instead of the baked
+# SQLite snapshot.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.warehouse.yml up -d
+#
+# An overlay rather than a change to the base file, because the SQLite snapshot
+# stays the default: it needs no external service, it is what the current
+# deploy runs, and it remains the offline fallback for a presentation with no
+# warehouse behind it. Nothing here is reachable unless you ask for it.
+#
+# Requires the warehouse stack to be up first — it owns the network:
+#
+#   cd warehouse && docker compose up -d
+#
+# See warehouse/README.md and docs/live-data-simulation.md.
+
+services:
+  backend:
+    environment:
+      WAREHOUSE_BACKEND: postgres
+      # CLOCK_MODE stays `auto`, which resolves to live against Postgres: the
+      # simulated warehouse runs up to the present, so "now" is the real clock.
+      # Force CLOCK_MODE=frozen only to demo a fixed instant.
+      #
+      # The operator's timezone. Storage stays UTC; this is what puts the
+      # hour-of-day buckets and the demand peaks at Doha's lunch and dinner
+      # rather than three hours early.
+      BUSINESS_TIMEZONE: ${BUSINESS_TIMEZONE:-Asia/Qatar}
+      # `warehouse` is the service name on warehouse_net, not a hostname that
+      # needs DNS. The database publishes no port to the world.
+      DATABASE_URL: postgresql://clarity_reader:${CLARITY_READER_PASSWORD:?set CLARITY_READER_PASSWORD in .env}@warehouse:5432/${WAREHOUSE_DB:-warehouse}
+      WAREHOUSE_POOL_MIN: ${WAREHOUSE_POOL_MIN:-2}
+      WAREHOUSE_POOL_MAX: ${WAREHOUSE_POOL_MAX:-10}
+    networks:
+      - default
+      - warehouse_net
+
+  frontend:
+    build:
+      args:
+        # Empty = live clock. The frontend computes the date windows it asks
+        # the backend for, so it has to agree with the backend's clock —
+        # flipping only one of the two produces empty charts and no error.
+        # NEXT_PUBLIC_* is inlined at build time, so this needs --build.
+        NEXT_PUBLIC_CLOCK_FROZEN_AT: ""
+
+networks:
+  warehouse_net:
+    external: true

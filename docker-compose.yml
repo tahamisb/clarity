@@ -47,6 +47,12 @@ services:
         # Absolute (not relative) so server-rendered fetches resolve too.
         NEXT_PUBLIC_API_URL: ${PUBLIC_URL}
         NEXT_PUBLIC_ALLOWED_DOMAIN: ${NEXT_PUBLIC_ALLOWED_DOMAIN}
+        # This stack serves the frozen SQLite snapshot, whose data ends
+        # 2026-07-28, so the UI's "today" has to be that day or every calendar
+        # preset selects an empty window. The backend reaches the same
+        # conclusion on its own (CLOCK_MODE=auto + a sqlite warehouse); the two
+        # are flipped to live together by docker-compose.warehouse.yml.
+        NEXT_PUBLIC_CLOCK_FROZEN_AT: ${NEXT_PUBLIC_CLOCK_FROZEN_AT:-2026-07-28T21:45:00}
     restart: unless-stopped
     depends_on:
       - backend

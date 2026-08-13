@@ -16,8 +16,12 @@ COPY . .
 # the container env at runtime. Changing either one means rebuilding the image.
 ARG NEXT_PUBLIC_API_URL
 ARG NEXT_PUBLIC_ALLOWED_DOMAIN
+# Blank = live clock. Set only when serving the frozen SQLite snapshot,
+# whose data stops on a fixed day — see lib/clock.ts.
+ARG NEXT_PUBLIC_CLOCK_FROZEN_AT=""
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_ALLOWED_DOMAIN=$NEXT_PUBLIC_ALLOWED_DOMAIN
+ENV NEXT_PUBLIC_CLOCK_FROZEN_AT=$NEXT_PUBLIC_CLOCK_FROZEN_AT
 
 RUN pnpm build
 

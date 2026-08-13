@@ -2,6 +2,7 @@
 
 import { RefreshCw } from "lucide-react"
 import { useEffect, useState } from "react"
+import { DataFreshness } from "@/components/clarity/data-freshness"
 import { useSettings } from "@/lib/settings-context"
 import { useT } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
@@ -52,6 +53,10 @@ export function RefreshStatus({
 
   return (
     <div className="flex items-center gap-3 text-xs text-muted-foreground">
+      {/* Warehouse freshness first: it answers "is this data current", which
+          outranks "when did this tab last fetch". */}
+      <DataFreshness />
+      <span className="hidden lg:inline">·</span>
       <span className="hidden items-center gap-1.5 sm:flex">
         <span
           className={cn(
