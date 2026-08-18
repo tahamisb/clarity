@@ -153,9 +153,23 @@ def _sqlite_conn(path: Path) -> sqlite3.Connection:
 
 def _norm(value):
     """Compare across drivers without tripping over representation: Decimal vs
-    float, and Postgres date/datetime objects vs SQLite strings."""
+    float, and Postgres date/datetime objects vs SQLite strings.
+
+    Timestamps need real care. Since the compat views started returning native
+    timestamptz, psycopg hands back an aware datetime while SQLite hands back
+    'YYYY-MM-DD HH:MM:SS'. Rendered in a non-UTC session those look completely
+    different — `2025-01-01 07:30:14` against `2025-01-01 10:30:14+03:00` — for
+    the same instant. Normalising to UTC text is what makes the comparison
+    about the data instead of about the reader's timezone.
+    """
+    from datetime import datetime as _dt, timezone as _tz
+
     if value is None:
         return None
+    if isinstance(value, _dt):
+        if value.tzinfo is not None:
+            value = value.astimezone(_tz.utc).replace(tzinfo=None)
+        return value.strftime("%Y-%m-%d %H:%M:%S")
     if isinstance(value, (int,)) and not isinstance(value, bool):
         return value
     try:
@@ -170,6 +184,9 @@ def verify(dsn: str, sqlite_path: Path) -> int:
     mismatches = 0
 
     with psycopg.connect(dsn) as conn:
+        # Same pin as the backend pool: rendering must not depend on the
+        # server's timezone.
+        conn.execute("SET TIME ZONE 'UTC'")
         print(f"{'check':<28} {'sqlite':>22} {'postgres':>22}   ")
         print("-" * 78)
         for label, sqlite_sql, pg_sql in CHECKS:
