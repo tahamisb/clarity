@@ -173,6 +173,148 @@ BEGIN
 END
 $$ LANGUAGE plpgsql IMMUTABLE;
 
+-- Overloads for the native types the compat views expose. Before those views
+-- stopped rendering everything to text, a `date` or `timestamptz` argument here
+-- had no candidate function at all.
+--
+-- Each formats the value DIRECTLY. The obvious shortcut — delegate to the text
+-- version with `value::text` — costs two conversions and a re-parse per row,
+-- and on 1.4M orders `strftime('%Y-%m', order_placement_date)` took 31.9 s
+-- against 94 ms for a bare to_char. The monthly cancellation trend was the
+-- slowest endpoint in the product because of it.
+CREATE FUNCTION public.strftime(fmt text, value date)
+RETURNS text AS $$
+    SELECT CASE fmt
+        WHEN '%Y-%m'    THEN to_char(value, 'YYYY-MM')
+        WHEN '%w'       THEN extract(dow FROM value)::int::text
+        WHEN '%Y-%m-%d' THEN to_char(value, 'YYYY-MM-DD')
+        WHEN '%Y'       THEN to_char(value, 'YYYY')
+        WHEN '%m'       THEN to_char(value, 'MM')
+        WHEN '%A'       THEN to_char(value, 'FMDay')
+        WHEN '%H'       THEN '00'   -- a date has no time of day
+        ELSE (SELECT NULL::text WHERE public.raise_unsupported_strftime(fmt))
+    END
+$$ LANGUAGE sql IMMUTABLE PARALLEL SAFE;
+
+CREATE FUNCTION public.strftime(fmt text, value timestamptz)
+RETURNS text AS $$
+    SELECT CASE fmt
+        WHEN '%H'       THEN to_char(value AT TIME ZONE 'UTC', 'HH24')
+        WHEN '%w'       THEN extract(dow FROM value AT TIME ZONE 'UTC')::int::text
+        WHEN '%Y-%m'    THEN to_char(value AT TIME ZONE 'UTC', 'YYYY-MM')
+        WHEN '%Y-%m-%d' THEN to_char(value AT TIME ZONE 'UTC', 'YYYY-MM-DD')
+        WHEN '%Y'       THEN to_char(value AT TIME ZONE 'UTC', 'YYYY')
+        WHEN '%m'       THEN to_char(value AT TIME ZONE 'UTC', 'MM')
+        WHEN '%A'       THEN to_char(value AT TIME ZONE 'UTC', 'FMDay')
+        ELSE (SELECT NULL::text WHERE public.raise_unsupported_strftime(fmt))
+    END
+$$ LANGUAGE sql STABLE PARALLEL SAFE;
+
+CREATE FUNCTION public.datetime(value timestamptz)
+RETURNS text AS $$ SELECT to_char(value AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS') $$
+LANGUAGE sql STABLE PARALLEL SAFE;
+
+-- json_each(doc) --------------------------------------------------------------
+-- SQLite's table-valued JSON1 function, used to explode the JSON arrays on
+-- call_analysis in a FROM clause (`FROM call_analysis ca, json_each(ca.areas)`).
+-- Postgres applies LATERAL implicitly to set-returning functions in FROM, so
+-- the reference to `ca` resolves the same way it does under SQLite.
+--
+-- Only the columns the queries actually read are provided (key, value, type);
+-- SQLite's version also exposes atom/id/parent/fullkey/path. Arrays only —
+-- which is all these columns ever hold.
+--
+-- NULL or unparseable input yields no rows rather than raising: on a dataset
+-- this size, one malformed row should not empty an entire dashboard panel.
+CREATE FUNCTION public.json_each(doc text)
+RETURNS TABLE (key integer, value text, type text) AS $$
+DECLARE parsed jsonb;
+BEGIN
+    IF doc IS NULL THEN RETURN; END IF;
+    BEGIN
+        parsed := doc::jsonb;
+    EXCEPTION WHEN others THEN
+        RETURN;
+    END;
+    IF jsonb_typeof(parsed) <> 'array' THEN RETURN; END IF;
+    RETURN QUERY
+        SELECT (ord - 1)::integer, el #>> '{}', jsonb_typeof(el)
+        FROM jsonb_array_elements(parsed) WITH ORDINALITY AS t(el, ord);
+END
+$$ LANGUAGE plpgsql IMMUTABLE;
+
+-- APPROX_TOP_COUNT(x, 1)[OFFSET(0)].value -----------------------------------
+-- Postgres has mode() WITHIN GROUP, but that is ordered-set syntax and would
+-- mean rewriting every call site. A plain aggregate keeps the SQL identical.
+--
+-- The state is a COUNTER, not the list of values seen. The obvious
+-- implementation — array_append into an anyarray, then unnest and count in the
+-- final function — is O(rows) memory per group and collapsed on real volume:
+-- one GROUP BY over 1.4M orders went from 187 ms without it to over 25 s with
+-- it, and every dashboard on the box timed out. Counting into a jsonb object
+-- is O(distinct values) instead, and the same query runs in 2.4 s.
+--
+-- Ties break by key, so the result is deterministic. SQLite's UDF breaks them
+-- by first-seen, which is the one known cross-engine divergence.
+CREATE FUNCTION public._mode_accum(state jsonb, value text)
+RETURNS jsonb AS $$
+    SELECT CASE WHEN value IS NULL THEN state
+           ELSE jsonb_set(state, ARRAY[value],
+                          to_jsonb(COALESCE((state ->> value)::bigint, 0) + 1)) END
+$$ LANGUAGE sql IMMUTABLE PARALLEL SAFE;
+
+CREATE FUNCTION public._mode_final(state jsonb)
+RETURNS text AS $$
+    SELECT key FROM jsonb_each_text(state) ORDER BY value::bigint DESC, key LIMIT 1
+$$ LANGUAGE sql IMMUTABLE PARALLEL SAFE;
+
+CREATE AGGREGATE public.mode_value(text) (
+    SFUNC     = public._mode_accum,
+    STYPE     = jsonb,
+    FINALFUNC = public._mode_final,
+    INITCOND  = '{}',
+    PARALLEL  = SAFE
+);
+
+-- ROUND(x, places) on a float ------------------------------------------------
+-- Postgres ships round(numeric, int) and round(double precision) but NOT
+-- round(double precision, int) — and the dashboards round float rates
+-- everywhere (`ROUND(rate * 100, 1)`). Without this every percentage query
+-- fails with "function round(double precision, integer) does not exist".
+CREATE FUNCTION public.round(value double precision, places integer)
+RETURNS double precision AS $$ SELECT round(value::numeric, places)::double precision $$
+LANGUAGE sql IMMUTABLE PARALLEL SAFE;
+
+-- json_extract(doc, path) ----------------------------------------------------
+-- SQLite's JSON1 function, used to pull the first entity out of the
+-- JSON-encoded arrays on call_analysis (`'$[0]'`). Implements the subset of
+-- the path syntax that appears in the queries and raises on anything else,
+-- rather than silently returning NULL for a path it does not understand.
+--
+-- Unparseable JSON returns NULL, matching SQLite — one malformed row should
+-- not take down a dashboard.
+CREATE FUNCTION public.json_extract(doc text, path text)
+RETURNS text AS $$
+DECLARE parsed jsonb;
+BEGIN
+    IF doc IS NULL OR path IS NULL THEN RETURN NULL; END IF;
+    BEGIN
+        parsed := doc::jsonb;
+    EXCEPTION WHEN others THEN
+        RETURN NULL;
+    END;
+    IF path ~ '^\$\[[0-9]+\]$' THEN
+        RETURN parsed ->> (substring(path from '[0-9]+'))::int;
+    ELSIF path ~ '^\$\.[A-Za-z_][A-Za-z0-9_]*$' THEN
+        RETURN parsed ->> substring(path from 3);
+    ELSIF path = '$' THEN
+        RETURN parsed #>> '{}';
+    END IF;
+    RAISE EXCEPTION 'json_extract shim does not implement path %', path
+        USING HINT = 'Add it to warehouse/sql/020_functions.sql';
+END
+$$ LANGUAGE plpgsql IMMUTABLE;
+
 -- Overloads for the native types the compat views now expose. Before those
 -- views stopped rendering everything to text, a `date` or `timestamptz`
 -- argument here simply had no candidate function and the query failed.
