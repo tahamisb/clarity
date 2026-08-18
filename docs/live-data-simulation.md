@@ -721,3 +721,51 @@ That work also surfaced a genuine schema bug: `cancellation_predictions` was
 unique on `(order_id, predicted_at)`, so the scorecard and the trained model
 could not both score the same order at the same instant. The engine is now part
 of the key.
+
+
+---
+
+## 15. Scale — what the 60k snapshot hid
+
+Everything above was verified against the 60k-row snapshot, where a full table
+scan is instant. The first VPS deploy on the seeded 1.4M-row dataset had
+**every date-filtered endpoint time out**. Three separate causes, none of them
+visible at small scale:
+
+| | 1.4M rows, before | after |
+|---|---|---|
+| `WHERE order_placement_date >= …` through the compat view | 1341 ms | 1.4 ms |
+| `mode_value(platform_name)` in a GROUP BY | > 25 s | 2.4 s |
+| `strftime('%Y-%m', order_placement_date)` | 31.9 s | 1.1 s |
+| the monthly cancellation trend endpoint | timed out | 2.1 s |
+
+- **The compat views rendered every date with `to_char()`**, so no predicate
+  could use an index — and `to_char` is STABLE, not IMMUTABLE, so an expression
+  index could not recover it either. They return native `date`/`timestamptz`
+  now; the driver formats them on the way out, so the wire format is unchanged.
+- **`mode_value` accumulated every value into an array per group**, which is
+  O(rows) memory per group. It counts into a jsonb object instead.
+- **`strftime` on a date delegated to the text overload**, costing two
+  conversions and a re-parse per row. It formats the typed value directly.
+
+Cold endpoint times are now 0.3–6.5 s locally and 0.5–7.4 s on the 2-core VPS,
+and the startup warmer keeps the dashboard views hot.
+
+**Density is a deployment knob.** `SIM_ORDERS_PER_DAY` trades realism against
+the hardware: 2500/day (1.4M rows over the window) locally, 1200/day (690k) on
+the VPS, where two cores make a cold aggregate roughly twice as slow. Both look
+live; the lower one just scans less.
+
+### The schema was never applied from scratch
+
+Every statement under `sql/` had been applied by hand with `CREATE OR REPLACE`
+during development, so the files had never once run top-to-bottom against an
+empty database. Two duplicate definitions had accumulated, and the container's
+initdb runs with `ON_ERROR_STOP` — so the first duplicate aborted
+`020_functions.sql` and every file after it. The cluster came up with shim
+functions and **no tables**, and the ticker crash-looped against a schema that
+did not exist.
+
+`warehouse/check_schema.sh` now applies `sql/` to a throwaway database exactly
+as a fresh container does. It found the second duplicate immediately. Run it
+before pushing anything under `sql/`.

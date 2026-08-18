@@ -222,6 +222,19 @@ writes, so a demo can always answer "which of this arrived just now?".
 
 ## Verifying a change to this directory
 
+**Anything under `sql/` — run this first:**
+
+```bash
+./check_schema.sh          # applies sql/ to a throwaway database, as initdb does
+```
+
+The files are applied with ON_ERROR_STOP inside the container, so one bad
+statement aborts that file and every file after it. That is not hypothetical:
+a duplicated CREATE FUNCTION once left a cluster with shim functions and no
+tables at all.
+
+
+
 Anything that touches `sql/` or `sim/` should be checked against the backend,
 not just against itself:
 
