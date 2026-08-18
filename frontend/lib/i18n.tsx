@@ -666,6 +666,7 @@ export const translations: Dict = {
   "cancel.highRecallDesc": { en: " — ops would rather review a false alarm than miss a real cancellation.", ar: " — تفضّل العمليات مراجعة إنذار كاذب على تفويت إلغاء حقيقي." },
   "cancel.lastTrained": { en: "Last trained: {date}", ar: "آخر تدريب: {date}" },
   "cancel.driversReport": { en: "Cancellation Drivers Report", ar: "تقرير محركات الإلغاء" },
+  "cancel.briefing": { en: "AI Briefing", ar: "الموجز الذكي" },
   "cancel.generatingReport": { en: "Generating the Gemini drivers report from live cancellation data…", ar: "جارٍ توليد تقرير محركات Gemini من بيانات الإلغاء المباشرة…" },
   "cancel.reportFirstRequest": { en: "The Gemini drivers report is generated on first request. Ensure the backend is running and try refreshing.", ar: "يُولَّد تقرير محركات Gemini عند أول طلب. تأكد من تشغيل الخادم وأعد التحديث." },
   "cancel.executiveSummary": { en: "Executive Summary", ar: "الملخص التنفيذي" },
@@ -794,6 +795,159 @@ export const translations: Dict = {
   "bot.placeholder": { en: "Ask Clarity about the dashboard data...", ar: "اسأل Clarity عن بيانات اللوحة..." },
   "bot.disclaimer": { en: "AI can make mistakes. Consider verifying important information with the raw analytics tables.", ar: "قد يخطئ الذكاء الاصطناعي. ننصح بالتحقق من المعلومات المهمة من جداول التحليلات الأصلية." },
   "bot.error": { en: "Sorry, I encountered an error. Please try again later.", ar: "عذراً، واجهت خطأً. يرجى المحاولة لاحقاً." },
+
+  // — Call reason (specific trigger, replaces the "General" bucket) ————————
+  "ci.statTopReason": { en: "Top Call Reason", ar: "أكثر أسباب الاتصال" },
+  "col.reason": { en: "Reason", ar: "السبب" },
+  "cdm.callReason": { en: "Reason for the call", ar: "سبب الاتصال" },
+  "chart.callReasons": { en: "Why customers called", ar: "لماذا اتصل العملاء" },
+  "chart.uploadForReasons": {
+    en: "Analyse calls to see why customers are calling.",
+    ar: "حلّل المكالمات لمعرفة أسباب اتصال العملاء.",
+  },
+  "chart.negShare": { en: "{pct}% negative", ar: "{pct}% سلبي" },
+
+  // — Handled by: bot vs agent ————————————————————————————
+  "handled.title": { en: "Handled by bot vs agent", ar: "معالجة الروبوت مقابل الموظف" },
+  "handled.empty": {
+    en: "No handled conversations in this window yet.",
+    ar: "لا توجد محادثات معالجة في هذه الفترة.",
+  },
+  "handled.bot": { en: "Bot", ar: "الروبوت" },
+  "handled.agent": { en: "Human agent", ar: "موظف بشري" },
+  "handled.share": { en: "{pct}% of all", ar: "{pct}% من الإجمالي" },
+  "handled.conversations": { en: "conversations handled", ar: "محادثة تمت معالجتها" },
+  "handled.insight": {
+    en: "The bot handled {botPct}% of conversations and agents {agentPct}%. {better} conversations end negative less often — {gap} points below {worse}.",
+    ar: "عالج الروبوت {botPct}% من المحادثات والموظفون {agentPct}%. محادثات {better} تنتهي سلبياً بمعدل أقل — أقل بـ {gap} نقطة من {worse}.",
+  },
+  "handled.insightEven": {
+    en: "The bot handled {botPct}% of conversations and agents {agentPct}%, with effectively the same negative-sentiment outcome on both sides.",
+    ar: "عالج الروبوت {botPct}% من المحادثات والموظفون {agentPct}%، بنتائج مشاعر سلبية متقاربة.",
+  },
+  "handled.insightNone": {
+    en: "Only one handler is present in this window — no bot-versus-agent comparison is possible.",
+    ar: "يوجد معالج واحد فقط في هذه الفترة — لا يمكن المقارنة.",
+  },
+
+  // — Cancellations by hour ————————————————————————————
+  "cancel.rateByHour": { en: "Cancellation Rate by Hour", ar: "معدل الإلغاء حسب الساعة" },
+  "cancel.noHour": { en: "No hourly data for this window.", ar: "لا توجد بيانات ساعية لهذه الفترة." },
+  "cancel.worstHour": { en: "Peak: {hour} at {rate}%", ar: "الذروة: {hour} بنسبة {rate}%" },
+  "cancel.worstDay": { en: "Peak: {day}", ar: "الذروة: {day}" },
+  "cancel.hourOrders": { en: "Cancelled / orders", ar: "الملغاة / الطلبات" },
+
+  // — CX dashboard: shared insight vocabulary —————————————————
+  "cx.up": { en: "up", ar: "ارتفاعاً" },
+  "cx.down": { en: "down", ar: "انخفاضاً" },
+  "cx.improved": { en: "improved", ar: "تحسّن" },
+  "cx.declined": { en: "declined", ar: "تراجع" },
+  "cx.noPriorWeek": { en: "with no prior week to compare against", ar: "دون أسبوع سابق للمقارنة" },
+  "cx.worseThanPrior": { en: "{pts} points worse than the week before", ar: "أسوأ بـ {pts} نقطة عن الأسبوع السابق" },
+  "cx.betterThanPrior": { en: "{pts} points better than the week before", ar: "أفضل بـ {pts} نقطة عن الأسبوع السابق" },
+  "cx.catBilling": { en: "billing", ar: "الفواتير" },
+  "cx.catTechnical": { en: "technical", ar: "تقني" },
+  "cx.catComplaints": { en: "complaints", ar: "الشكاوى" },
+  "cx.toneNegative": { en: "Negative signal", ar: "إشارة سلبية" },
+  "cx.tonePositive": { en: "Positive signal", ar: "إشارة إيجابية" },
+  "cx.toneNeutral": { en: "Neutral signal", ar: "إشارة محايدة" },
+
+  // — CX dashboard: per-chart insights —————————————————————
+  "cx.insightCallVolume": {
+    en: "{total} calls in the latest week, {dir} {delta}% on the week before. {top} leads with {topN}.",
+    ar: "{total} مكالمة في الأسبوع الأخير، {dir} بنسبة {delta}% عن الأسبوع السابق. الأعلى: {top} بـ {topN}.",
+  },
+  "cx.insightCallSentiment": {
+    en: "{neg}% of the latest week's calls ended negative — {trend}.",
+    ar: "{neg}% من مكالمات الأسبوع الأخير انتهت سلبياً — {trend}.",
+  },
+  "cx.insightComplaints": {
+    en: "“{name}” is the single biggest driver at {count} calls — {share}% of all calls in this window.",
+    ar: "«{name}» هو المحرّك الأكبر بـ {count} مكالمة — {share}% من إجمالي المكالمات.",
+  },
+  "cx.insightSentimentScore": {
+    en: "Message sentiment sits at {score}/10, {dir} {diff} points across the last {weeks} weeks.",
+    ar: "مشاعر الرسائل عند {score}/10، {dir} بمقدار {diff} نقطة خلال آخر {weeks} أسابيع.",
+  },
+  "cx.insightNegTopics": {
+    en: "“{topic}” accounts for {share}% of the top negative volume ({count} mentions) — fix it and the rest shrink.",
+    ar: "«{topic}» يشكل {share}% من أعلى حجم سلبي ({count} إشارة) — معالجته تقلّل الباقي.",
+  },
+  "cx.insightCancelTrend": {
+    en: "Latest week is {rate}%, {dir} {pts} points. The window peaked in {peakWeek} at {peakRate}%.",
+    ar: "الأسبوع الأخير {rate}%، {dir} بمقدار {pts} نقطة. الذروة في {peakWeek} بنسبة {peakRate}%.",
+  },
+  "cx.insightCancelActor": {
+    en: "{name} initiates {pct}% of all cancellations — the first place to look for a fix.",
+    ar: "{name} يبدأ {pct}% من إجمالي الإلغاءات — أول موضع للمعالجة.",
+  },
+  "cx.insightCancelDriver": {
+    en: "{name} carries {pct}% of the model's predictive weight for cancellations.",
+    ar: "{name} يحمل {pct}% من الوزن التنبؤي للإلغاءات.",
+  },
+  "cx.insightHealth": {
+    en: "Health is {score}/100 ({label}), {dir} {pts} points on the previous week.",
+    ar: "مؤشر الصحة {score}/100 ({label})، {dir} بمقدار {pts} نقطة عن الأسبوع السابق.",
+  },
+
+  // — CX dashboard: executive summary —————————————————————
+  "cx.zoneFilter": { en: "Filter by zone", ar: "تصفية حسب المنطقة" },
+  "cx.scopedToZone": { en: "Scoped to {zone}", ar: "النطاق: {zone}" },
+  "cx.scopeHint": {
+    en: "Scoped by the time range and vertical in the top bar.",
+    ar: "النطاق محدد بالفترة الزمنية والقطاع في الشريط العلوي.",
+  },
+  "cx.execTitle": { en: "Executive summary", ar: "الملخص التنفيذي" },
+  "cx.execSubtitle": {
+    en: "Calls, support messages and cancellations for the selected window, in one read.",
+    ar: "المكالمات ورسائل الدعم والإلغاءات للفترة المحددة، في قراءة واحدة.",
+  },
+  "cx.execVerdict": {
+    en: "Customer health is {label} at {score}/100 across {interactions} interactions, with overall sentiment at {sentiment}/10.",
+    ar: "صحة العملاء {label} عند {score}/100 عبر {interactions} تفاعل، والمشاعر العامة {sentiment}/10.",
+  },
+  "cx.execVolume": {
+    en: "Volume: {calls} analysed calls and {messages} support messages; {contact} of orders generated a support contact.",
+    ar: "الحجم: {calls} مكالمة محلّلة و{messages} رسالة دعم؛ {contact} من الطلبات أدت إلى تواصل مع الدعم.",
+  },
+  "cx.execCalls": {
+    en: "Calls: “{name}” is the leading reason people phone in, at {count} calls.",
+    ar: "المكالمات: «{name}» هو السبب الأبرز للاتصال، بـ {count} مكالمة.",
+  },
+  "cx.execHandled": {
+    en: "Handling: the bot closed {botPct}% of chats ({botNeg}% negative) and agents {agentPct}% ({agentNeg}% negative).",
+    ar: "المعالجة: أغلق الروبوت {botPct}% من المحادثات ({botNeg}% سلبية) والموظفون {agentPct}% ({agentNeg}% سلبية).",
+  },
+  "cx.execSentiment": {
+    en: "Messages: “{trigger}” is the loudest negative trigger, on {volume} conversations.",
+    ar: "الرسائل: «{trigger}» هو المحفز السلبي الأبرز، في {volume} محادثة.",
+  },
+  "cx.execCancel": {
+    en: "Cancellations: {rate}% overall, worst in {zone} at {zoneRate}%.",
+    ar: "الإلغاءات: {rate}% إجمالاً، والأسوأ في {zone} بنسبة {zoneRate}%.",
+  },
+  "cx.execCancelNoZone": {
+    en: "Cancellations: {rate}% overall; no zone has enough volume to single out.",
+    ar: "الإلغاءات: {rate}% إجمالاً؛ لا توجد منطقة بحجم كافٍ لتحديدها.",
+  },
+  "cx.execActTitle": { en: "What to act on first", ar: "ما يجب معالجته أولاً" },
+  "cx.execActionCancel": {
+    en: "Cancellations are above the 8% tolerance — start with {zone}, the worst-performing zone in the window.",
+    ar: "الإلغاءات تجاوزت حد 8% — ابدأ بـ {zone}، أسوأ منطقة في الفترة.",
+  },
+  "cx.execActionEscalation": {
+    en: "{pct}% of chats escalate to a human — the bot is handing off too much; review its top failing intents.",
+    ar: "{pct}% من المحادثات تُحوّل إلى موظف — الروبوت يحوّل أكثر مما ينبغي؛ راجع أكثر النوايا فشلاً.",
+  },
+  "cx.execActionComplaint": {
+    en: "Nothing has crossed an alert threshold. The highest-leverage fix remains “{name}”, the top call driver.",
+    ar: "لم يتجاوز أي مؤشر حد التنبيه. أكبر أثر يبقى في معالجة «{name}»، أبرز محرك للمكالمات.",
+  },
+  "cx.execActionNone": {
+    en: "No signal in this window is above its alert threshold.",
+    ar: "لا توجد إشارة في هذه الفترة تتجاوز حد التنبيه.",
+  },
+
   "bot.speechUnsupported": { en: "Speech recognition is not supported in your browser.", ar: "التعرّف على الكلام غير مدعوم في متصفحك." },
 }
 

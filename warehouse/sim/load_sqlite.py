@@ -218,6 +218,9 @@ def _call(r: sqlite3.Row) -> dict:
         "product_names": _json(r["product_names"]),
         "qar_amounts": _json(r["qar_amounts"]),
         "summary": r["summary"],
+        # Added to the snapshot by a local_db migration, so it may be absent
+        # from an older file — keys() rather than [] to avoid an IndexError.
+        "call_reason": r["call_reason"] if "call_reason" in r.keys() else None,
         "analysed_at": _ts(r["analysed_at"]),
         "sim_emitted_at": None,
     }

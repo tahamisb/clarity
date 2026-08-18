@@ -17,9 +17,10 @@ import { HeroBanner } from "@/components/clarity/hero-banner"
 import { StatCard } from "@/components/clarity/stat-card"
 import { FilterBar, type CallFilters } from "@/components/clarity/filter-bar"
 import { QatarMap } from "@/components/clarity/qatar-map"
-import { CallTable } from "@/components/clarity/call-table"
+import { CallTable, CALL_FILTER_COLUMNS } from "@/components/clarity/call-table"
+import { applyColumnFilters, type ColumnFilterState } from "@/components/clarity/column-filter"
 import { ToneChart } from "@/components/clarity/tone-chart"
-import { CategoryBreakdown } from "@/components/clarity/category-breakdown"
+import { CallReasons } from "@/components/clarity/call-reasons"
 import { IntentPanel } from "@/components/clarity/intent-panel"
 import { SentimentTrend } from "@/components/clarity/sentiment-trend"
 import { TopTopics } from "@/components/clarity/top-topics"
@@ -57,6 +58,7 @@ type ApiResult = {
     qar_amounts: string[]
   }
   summary: string
+  reason?: string
   analysed_at: string
   error?: string
 }
@@ -107,6 +109,7 @@ function transformResult(r: ApiResult): CallRecord {
     confidence: Math.round(r.sentiment_confidence * 100),
     transcript: r.transcript,
     summary: r.summary,
+    reason: r.reason?.trim() || intent,
     agentHelpfulness: "N/A",
     customerBehavior: "N/A",
   }
@@ -185,6 +188,9 @@ export default function Page() {
   const [search, setSearch] = useState("")
   const [activeSearchCall, setActiveSearchCall] = useState<CallRecord | null>(null)
   const [filters, setFilters] = useState<CallFilters>({ category: null, sentiment: null, agent: null })
+  // The call table's per-column header filters live here, not inside the table,
+  // so the charts, map and stat cards scope to them too.
+  const [columnFilters, setColumnFilters] = useState<ColumnFilterState>({})
   const [toast, setToast] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -245,42 +251,62 @@ export default function Page() {
   }, [scopedCalls])
 
   // ---------------------------------------------------------------------------
+  // Active filter set — applied to EVERY card on the page (stats, map, charts,
+  // table), not just the table, so a filtered view is internally consistent.
+  //
+  // `skip` lets a control exclude its own dimension: the intent panel still
+  // shows all intents while one is selected, otherwise picking an intent would
+  // collapse its own list to a single row and strand the user.
+  // ---------------------------------------------------------------------------
+  const applyFilters = useCallback(
+    (rows: CallRecord[], skip?: "intent") => {
+      const q = search.trim().toLowerCase()
+      const base = rows.filter((c) => {
+        if (filters.category && c.category !== filters.category) return false
+        if (filters.sentiment && c.sentiment !== filters.sentiment) return false
+        if (filters.agent && c.agent !== filters.agent) return false
+        if (skip !== "intent" && intentFilter && c.intent !== intentFilter) return false
+        if (q && !c.id.toLowerCase().includes(q) && !c.agent.toLowerCase().includes(q) && !c.city.toLowerCase().includes(q))
+          return false
+        return true
+      })
+      return applyColumnFilters(base, CALL_FILTER_COLUMNS, columnFilters)
+    },
+    [filters, intentFilter, search, columnFilters],
+  )
+
+  const filteredCalls = useMemo(() => applyFilters(scopedCalls), [scopedCalls, applyFilters])
+  const intentPanelCalls = useMemo(
+    () => applyFilters(scopedCalls, "intent"),
+    [scopedCalls, applyFilters],
+  )
+
+  // ---------------------------------------------------------------------------
   // Derived stats for the stat cards
   // ---------------------------------------------------------------------------
   const stats = useMemo(() => {
-    const total = scopedCalls.length
-    if (total === 0) return { total: 0, avgDuration: "—", negativeRate: "—", topCategory: "—" }
+    const total = filteredCalls.length
+    if (total === 0) return { total: 0, avgDuration: "—", negativeRate: "—", topReason: "—" }
 
-    const avgSec = scopedCalls.reduce((s, c) => s + c.durationSec, 0) / total
-    const negCount = scopedCalls.filter((c) => c.sentiment === "Negative").length
+    const avgSec = filteredCalls.reduce((s, c) => s + c.durationSec, 0) / total
+    const negCount = filteredCalls.filter((c) => c.sentiment === "Negative").length
 
-    const catMap: Record<string, number> = {}
-    for (const c of scopedCalls) catMap[c.category] = (catMap[c.category] || 0) + 1
-    const topCategory = Object.entries(catMap).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "—"
+    // The single most common concrete reason for calling — not a bucket name.
+    const reasonMap: Record<string, number> = {}
+    for (const c of filteredCalls) {
+      const r = c.reason || c.intent
+      reasonMap[r] = (reasonMap[r] || 0) + 1
+    }
+    const topReason = Object.entries(reasonMap).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "—"
 
     return {
       total,
       avgDuration: formatDuration(Math.round(avgSec)),
       negativeRate: `${((negCount / total) * 100).toFixed(1)}%`,
-      topCategory,
+      topReason,
     }
-  }, [scopedCalls])
+  }, [filteredCalls])
 
-  // ---------------------------------------------------------------------------
-  // Filtered calls for the table
-  // ---------------------------------------------------------------------------
-  const filteredCalls = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    return scopedCalls.filter((c) => {
-      if (filters.category && c.category !== filters.category) return false
-      if (filters.sentiment && c.sentiment !== filters.sentiment) return false
-      if (filters.agent && c.agent !== filters.agent) return false
-      if (intentFilter && c.intent !== intentFilter) return false
-      if (q && !c.id.toLowerCase().includes(q) && !c.agent.toLowerCase().includes(q) && !c.city.toLowerCase().includes(q))
-        return false
-      return true
-    })
-  }, [scopedCalls, filters, intentFilter, search])
 
   // Topbar search dropdown — matches within the scoped calls; clicking opens the
   // call's detail modal (rendered below).
@@ -307,15 +333,16 @@ export default function Page() {
 
   const resetFilters = useCallback(() => {
     setFilters({ category: null, sentiment: null, agent: null })
+    setColumnFilters({})
     setIntentFilter(null)
     setSearch("")
   }, [])
 
   const exportCsv = useCallback(() => {
-    const header = ["Call ID", "Date & Time", "Duration", "Agent", "City", "Category", "Sentiment", "Intent", "Confidence"]
+    const header = ["Call ID", "Date & Time", "Duration", "Agent", "City", "Reason", "Category", "Sentiment", "Intent", "Confidence"]
     const rows = filteredCalls.map((c: CallRecord) => [
       c.id, c.datetime, formatDuration(c.durationSec), c.agent, c.city,
-      c.category, c.sentiment, c.intent, `${c.confidence}%`,
+      c.reason, c.category, c.sentiment, c.intent, `${c.confidence}%`,
     ])
     const csv = [header, ...rows]
       .map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","))
@@ -442,8 +469,8 @@ export default function Page() {
               badge={<VerticalBadge vertical={vertical} />}
             />
             <StatCard
-              label={t("ci.statTopCategory")}
-              value={tv(stats.topCategory)}
+              label={t("ci.statTopReason")}
+              value={tv(stats.topReason)}
               trend="neutral"
               icon={Flame}
               badge={<VerticalBadge vertical={vertical} />}
@@ -464,23 +491,38 @@ export default function Page() {
           </div>
 
           <div id="coverage">
-            <QatarMap calls={scopedCalls} />
+            <QatarMap calls={filteredCalls} />
           </div>
 
+          {/* Two balanced stacks. The wide side carries the table and the trend
+              (~975px), the narrow side the donut and the intent list (~915px) —
+              within a row of each other, so neither column ends in a void. The
+              reasons panel used to sit here and overhung the left by ~425px; it
+              now pairs with Top Topics below, where the heights match. */}
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-[2fr_1fr]">
             <div className="flex min-w-0 flex-col gap-6">
-              <CallTable calls={filteredCalls} activeLabel={intentFilter} />
-              <SentimentTrend calls={scopedCalls} />
+              <CallTable
+                calls={filteredCalls}
+                activeLabel={intentFilter}
+                filters={columnFilters}
+                onFiltersChange={setColumnFilters}
+                filterSource={scopedCalls}
+              />
+              <SentimentTrend calls={filteredCalls} />
             </div>
             <div id="intents" className="flex min-w-0 flex-col gap-6">
-              <ToneChart calls={scopedCalls} />
-              <IntentPanel calls={scopedCalls} selected={intentFilter} onSelect={setIntentFilter} />
-              <CategoryBreakdown calls={scopedCalls} />
+              <ToneChart calls={filteredCalls} />
+              <IntentPanel calls={intentPanelCalls} selected={intentFilter} onSelect={setIntentFilter} />
             </div>
           </div>
 
-          <div id="reports" className="min-w-0">
-            <TopTopics calls={scopedCalls} />
+          {/* Both are "what were the calls about" reads — the narrow list of
+              reasons beside the wide ranked table. */}
+          <div id="reports" className="grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-[1fr_2fr]">
+            <CallReasons calls={filteredCalls} />
+            <div className="min-w-0">
+              <TopTopics calls={filteredCalls} />
+            </div>
           </div>
           </>
           )}

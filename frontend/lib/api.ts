@@ -15,15 +15,27 @@ const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8001"
  * yields "" so the backend returns its full aggregation. Append only to
  * endpoints that have no other query params (the analytics endpoints below).
  */
-function rangeSuffix(range: TimeRange, vertical: VerticalFilter = "all"): string {
+function rangeSuffix(
+  range: TimeRange, vertical: VerticalFilter = "all", zone: ZoneFilter = "all",
+): string {
   const { start, end } = rangeParams(range)
   const parts: string[] = []
   if (start) parts.push(`start=${start}`)
   if (end) parts.push(`end=${end}`)
   const v = verticalParam(vertical)
   if (v) parts.push(`vertical=${encodeURIComponent(v)}`)
+  const z = zoneParam(zone)
+  if (z) parts.push(`zone=${encodeURIComponent(z)}`)
   return parts.length ? `?${parts.join("&")}` : ""
 }
+
+/** Delivery-zone filter. "all" means no zone predicate. */
+export type ZoneFilter = string
+export const zoneParam = (zone: ZoneFilter) => (zone && zone !== "all" ? zone : null)
+
+/** The zone vocabulary, read from the warehouse rather than hardcoded. */
+export const fetchZones = () =>
+  apiFetch<{ zones: string[] }>("/api/cancellation/analytics/zones").then((d) => d?.zones ?? [])
 
 /**
  * Absolute URL for the negative-customer CSV export, scoped to the active
@@ -204,9 +216,9 @@ type ApiSentimentResults = {
 // ---------------------------------------------------------------------------
 
 export async function fetchSentimentTrend(
-  range: TimeRange = "all", vertical: VerticalFilter = "all",
+  range: TimeRange = "all", vertical: VerticalFilter = "all", zone: ZoneFilter = "all",
 ): Promise<TrendItem[] | null> {
-  const data = await apiFetch<ApiSentimentTrend>(`/api/v1/analytics/sentiment-trend${rangeSuffix(range, vertical)}`)
+  const data = await apiFetch<ApiSentimentTrend>(`/api/v1/analytics/sentiment-trend${rangeSuffix(range, vertical, zone)}`)
   if (!data?.weeks?.length) return null
 
   return data.weeks.map((w, i) => ({
@@ -219,9 +231,9 @@ export async function fetchSentimentTrend(
 }
 
 export async function fetchTopNegativeTriggers(
-  range: TimeRange = "all", vertical: VerticalFilter = "all",
+  range: TimeRange = "all", vertical: VerticalFilter = "all", zone: ZoneFilter = "all",
 ): Promise<TriggerItem[] | null> {
-  const data = await apiFetch<ApiTopTriggers>(`/api/v1/analytics/top-negative-triggers${rangeSuffix(range, vertical)}`)
+  const data = await apiFetch<ApiTopTriggers>(`/api/v1/analytics/top-negative-triggers${rangeSuffix(range, vertical, zone)}`)
   if (!data?.triggers?.length) return null
 
   const peakTime = (dist: Record<string, number>) => {
@@ -247,9 +259,9 @@ export async function fetchTopNegativeTriggers(
 }
 
 export async function fetchCrossChannel(
-  range: TimeRange = "all", vertical: VerticalFilter = "all",
+  range: TimeRange = "all", vertical: VerticalFilter = "all", zone: ZoneFilter = "all",
 ): Promise<CrossChannelItem[] | null> {
-  const data = await apiFetch<ApiCrossChannel>(`/api/v1/analytics/cross-channel${rangeSuffix(range, vertical)}`)
+  const data = await apiFetch<ApiCrossChannel>(`/api/v1/analytics/cross-channel${rangeSuffix(range, vertical, zone)}`)
   // null → the fetch failed; keep whatever the chart is already showing. An empty
   // window (no shared intents in range) returns [] so the chart re-scopes to its
   // empty state instead of silently retaining the previous window's data.
@@ -420,9 +432,9 @@ type ApiMessageOverview = {
 // SLA thresholds come from the user's settings (Ticket → general, else chat).
 export async function fetchMessageOverview(
   range: TimeRange, chatSlaHours: number, generalSlaHours: number,
-  vertical: VerticalFilter = "all",
+  vertical: VerticalFilter = "all", zone: ZoneFilter = "all",
 ): Promise<MessageOverview | null> {
-  const q = rangeSuffix(range, vertical)
+  const q = rangeSuffix(range, vertical, zone)
   const sep = q ? "&" : "?"
   const data = await apiFetch<ApiMessageOverview>(
     `/api/v1/analytics/message-overview${q}${sep}chat_sla_hours=${chatSlaHours}&general_sla_hours=${generalSlaHours}`
@@ -455,9 +467,9 @@ export type SlaBreachItem = { message_id: string; channel: string; hours: number
 
 export async function fetchSlaBreaches(
   range: TimeRange, chatSlaHours: number, generalSlaHours: number,
-  vertical: VerticalFilter = "all",
+  vertical: VerticalFilter = "all", zone: ZoneFilter = "all",
 ): Promise<SlaBreachItem[] | null> {
-  const q = rangeSuffix(range, vertical)
+  const q = rangeSuffix(range, vertical, zone)
   const sep = q ? "&" : "?"
   const data = await apiFetch<{ breaches: SlaBreachItem[] }>(
     `/api/v1/analytics/sla-breaches${q}${sep}chat_sla_hours=${chatSlaHours}&general_sla_hours=${generalSlaHours}`
@@ -467,21 +479,43 @@ export async function fetchSlaBreaches(
 
 export async function fetchAllMessagesData(
   range: TimeRange = "all", chatSlaHours = 4, generalSlaHours = 24,
-  vertical: VerticalFilter = "all",
+  vertical: VerticalFilter = "all", zone: ZoneFilter = "all",
 ) {
   // The raw message feed is fetched in full and filtered client-side (so the
   // table/stat cards re-scope instantly on toggle); the pre-aggregated panels
   // are re-queried server-side for the selected window + vertical.
-  const [messages, overview, triggers, crossChannel, trend, zones] = await Promise.all([
+  const [messages, overview, triggers, crossChannel, trend, zones, handledBy] = await Promise.all([
     fetchMessages(range),
-    fetchMessageOverview(range, chatSlaHours, generalSlaHours, vertical),
-    fetchTopNegativeTriggers(range, vertical),
-    fetchCrossChannel(range, vertical),
-    fetchSentimentTrend(range, vertical),
+    fetchMessageOverview(range, chatSlaHours, generalSlaHours, vertical, zone),
+    fetchTopNegativeTriggers(range, vertical, zone),
+    fetchCrossChannel(range, vertical, zone),
+    fetchSentimentTrend(range, vertical, zone),
+    // The zone heatmap IS the zone comparison — scoping it to one zone would
+    // leave a single bar, so it stays window-wide for context.
     fetchZoneHeatmap(range, vertical),
+    fetchHandledBy(range, vertical, zone),
   ])
-  return { messages, overview, triggers, crossChannel, trend, zones }
+  return { messages, overview, triggers, crossChannel, trend, zones, handledBy }
 }
+
+// Bot vs human-agent handling, with each handler's sentiment outcome.
+export type HandlerRow = {
+  handler: "Bot" | "Agent"
+  handled: number
+  positive: number
+  neutral: number
+  negative: number
+  resolved: number
+  share_pct: number
+  positive_pct: number
+  neutral_pct: number
+  negative_pct: number
+  resolved_pct: number
+}
+export type HandledBy = { total: number; handlers: HandlerRow[] }
+
+export const fetchHandledBy = (range: TimeRange = "all", vertical: VerticalFilter = "all", zone: ZoneFilter = "all") =>
+  apiFetch<HandledBy>(`/api/v1/analytics/handled-by${rangeSuffix(range, vertical, zone)}`)
 
 // % of orders that generated a support chat (join on chat_history.order_id).
 export type ContactRate = {
@@ -512,6 +546,7 @@ type ApiCallRow = {
   product_names: string[]
   qar_amounts: string[]
   summary: string | null
+  call_reason?: string | null
   analysed_at: string | null
   vertical?: string | null
   agent_name?: string | null
@@ -566,6 +601,7 @@ function rowToCallRecord(r: ApiCallRow): CallRecord {
     confidence: Math.round((r.sentiment_confidence ?? 0.5) * 100),
     transcript: r.transcript ?? "",
     summary: r.summary ?? "",
+    reason: r.call_reason?.trim() || intent,
     agentHelpfulness: (VALID_HELPFULNESS.has(rawHelpfulness) ? rawHelpfulness : "N/A") as AgentHelpfulness,
     customerBehavior: (VALID_BEHAVIOR.has(rawBehavior) ? rawBehavior : "N/A") as CustomerBehavior,
     vertical: r.vertical ?? undefined,
@@ -633,6 +669,13 @@ export type CancelByZone = { by_zone_name: ZoneCancelRow[]; by_customer_zone: Zo
 
 export type TimeCancelRow = {
   time_bucket: string
+  total_orders: number
+  cancelled: number
+  cancel_rate_pct: number
+}
+
+export type HourCancelRow = {
+  hour: number
   total_orders: number
   cancelled: number
   cancel_rate_pct: number
@@ -730,24 +773,26 @@ export type DriversReport = {
 
 // Cancellation analytics are pre-aggregated server-side, so the range/vertical
 // are sent to the backend (which re-aggregates) rather than filtered locally.
-export const fetchCancelTrend = (range: TimeRange = "all", vertical: VerticalFilter = "all") =>
-  apiFetch<CancelTrend>(`/api/cancellation/analytics/trend${rangeSuffix(range, vertical)}`)
-export const fetchCancelByMerchant = (range: TimeRange = "all", vertical: VerticalFilter = "all") =>
-  apiFetch<CancelByMerchant>(`/api/cancellation/analytics/by-merchant${rangeSuffix(range, vertical)}`)
-export const fetchCancelByZone = (range: TimeRange = "all", vertical: VerticalFilter = "all") =>
-  apiFetch<CancelByZone>(`/api/cancellation/analytics/by-zone${rangeSuffix(range, vertical)}`)
-export const fetchCancelByTime = (range: TimeRange = "all", vertical: VerticalFilter = "all") =>
-  apiFetch<TimeCancelRow[]>(`/api/cancellation/analytics/by-time${rangeSuffix(range, vertical)}`)
-export const fetchCancelByDay = (range: TimeRange = "all", vertical: VerticalFilter = "all") =>
-  apiFetch<DowCancelRow[]>(`/api/cancellation/analytics/by-day${rangeSuffix(range, vertical)}`)
-export const fetchCancelByOrderSize = (range: TimeRange = "all", vertical: VerticalFilter = "all") =>
-  apiFetch<OrderSizeRow[]>(`/api/cancellation/analytics/by-order-size${rangeSuffix(range, vertical)}`)
-export const fetchCancelByActor = (range: TimeRange = "all", vertical: VerticalFilter = "all") =>
-  apiFetch<ActorRow[]>(`/api/cancellation/analytics/by-actor${rangeSuffix(range, vertical)}`)
-export const fetchCancelCrosstabs = (range: TimeRange = "all", vertical: VerticalFilter = "all") =>
-  apiFetch<CancelCrosstabs>(`/api/cancellation/analytics/crosstabs${rangeSuffix(range, vertical)}`)
-export const fetchCancelByVertical = (range: TimeRange = "all") =>
-  apiFetch<VerticalCancelRow[]>(`/api/cancellation/analytics/by-vertical${rangeSuffix(range)}`)
+export const fetchCancelTrend = (range: TimeRange = "all", vertical: VerticalFilter = "all", zone: ZoneFilter = "all") =>
+  apiFetch<CancelTrend>(`/api/cancellation/analytics/trend${rangeSuffix(range, vertical, zone)}`)
+export const fetchCancelByMerchant = (range: TimeRange = "all", vertical: VerticalFilter = "all", zone: ZoneFilter = "all") =>
+  apiFetch<CancelByMerchant>(`/api/cancellation/analytics/by-merchant${rangeSuffix(range, vertical, zone)}`)
+export const fetchCancelByZone = (range: TimeRange = "all", vertical: VerticalFilter = "all", zone: ZoneFilter = "all") =>
+  apiFetch<CancelByZone>(`/api/cancellation/analytics/by-zone${rangeSuffix(range, vertical, zone)}`)
+export const fetchCancelByTime = (range: TimeRange = "all", vertical: VerticalFilter = "all", zone: ZoneFilter = "all") =>
+  apiFetch<TimeCancelRow[]>(`/api/cancellation/analytics/by-time${rangeSuffix(range, vertical, zone)}`)
+export const fetchCancelByHour = (range: TimeRange = "all", vertical: VerticalFilter = "all", zone: ZoneFilter = "all") =>
+  apiFetch<{ by_hour: HourCancelRow[] }>(`/api/cancellation/analytics/by-hour${rangeSuffix(range, vertical, zone)}`)
+export const fetchCancelByDay = (range: TimeRange = "all", vertical: VerticalFilter = "all", zone: ZoneFilter = "all") =>
+  apiFetch<DowCancelRow[]>(`/api/cancellation/analytics/by-day${rangeSuffix(range, vertical, zone)}`)
+export const fetchCancelByOrderSize = (range: TimeRange = "all", vertical: VerticalFilter = "all", zone: ZoneFilter = "all") =>
+  apiFetch<OrderSizeRow[]>(`/api/cancellation/analytics/by-order-size${rangeSuffix(range, vertical, zone)}`)
+export const fetchCancelByActor = (range: TimeRange = "all", vertical: VerticalFilter = "all", zone: ZoneFilter = "all") =>
+  apiFetch<ActorRow[]>(`/api/cancellation/analytics/by-actor${rangeSuffix(range, vertical, zone)}`)
+export const fetchCancelCrosstabs = (range: TimeRange = "all", vertical: VerticalFilter = "all", zone: ZoneFilter = "all") =>
+  apiFetch<CancelCrosstabs>(`/api/cancellation/analytics/crosstabs${rangeSuffix(range, vertical, zone)}`)
+export const fetchCancelByVertical = (range: TimeRange = "all", zone: ZoneFilter = "all") =>
+  apiFetch<VerticalCancelRow[]>(`/api/cancellation/analytics/by-vertical${rangeSuffix(range, "all", zone)}`)
 export const fetchDriversReport = () =>
   apiFetch<DriversReport>("/api/cancellation/analytics/drivers-report")
 export const fetchFeatureImportance = () =>
@@ -768,26 +813,30 @@ export const askCancellationChat = (question: string) =>
 // Fast dashboard data. The Gemini drivers report is intentionally NOT here —
 // it's slow to generate, so the page fetches it separately (see fetchDriversReport)
 // and fills it in after the charts have already painted.
-export async function fetchAllCancellationData(range: TimeRange = "all", vertical: VerticalFilter = "all") {
+export async function fetchAllCancellationData(
+  range: TimeRange = "all", vertical: VerticalFilter = "all", zone: ZoneFilter = "all",
+) {
   // Analytics aggregates respect the selected window + vertical; model artifacts
   // (feature importance, model info) and the live queue are filter-independent.
-  const [trend, byMerchant, byZone, byTime, byDay, byOrderSize, byActor, crosstabs, byVertical,
+  const [trend, byMerchant, byZone, byTime, byHour, byDay, byOrderSize, byActor, crosstabs, byVertical,
     featureImportance, modelInfo, liveQueue] = await Promise.all([
-    fetchCancelTrend(range, vertical),
-    fetchCancelByMerchant(range, vertical),
+    fetchCancelTrend(range, vertical, zone),
+    fetchCancelByMerchant(range, vertical, zone),
     fetchCancelByZone(range, vertical),
-    fetchCancelByTime(range, vertical),
-    fetchCancelByDay(range, vertical),
-    fetchCancelByOrderSize(range, vertical),
-    fetchCancelByActor(range, vertical),
-    fetchCancelCrosstabs(range, vertical),
-    fetchCancelByVertical(range),
+    fetchCancelByTime(range, vertical, zone),
+    fetchCancelByHour(range, vertical, zone),
+    fetchCancelByDay(range, vertical, zone),
+    fetchCancelByOrderSize(range, vertical, zone),
+    fetchCancelByActor(range, vertical, zone),
+    fetchCancelCrosstabs(range, vertical, zone),
+    fetchCancelByVertical(range, zone),
     fetchFeatureImportance(),
     fetchModelInfo(),
     fetchLiveQueue(),
   ])
   return {
-    trend, byMerchant, byZone, byTime, byDay, byOrderSize, byActor, crosstabs, byVertical,
+    trend, byMerchant, byZone, byTime, byHour: byHour?.by_hour ?? null,
+    byDay, byOrderSize, byActor, crosstabs, byVertical,
     featureImportance, modelInfo, liveQueue,
   }
 }

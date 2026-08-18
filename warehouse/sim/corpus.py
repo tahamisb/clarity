@@ -17,6 +17,8 @@ Additions beyond the original are marked; everything else is unchanged.
 
 from __future__ import annotations
 
+import re as _re
+
 # (restaurant_name, platform_name, cuisine) — platform_name drives the vertical.
 MERCHANTS = [
     ("Shawarma Time", "Restaurants", "Levantine"),
@@ -249,6 +251,7 @@ CALL_SCENARIOS = [
         ],
         "agent": ["That's wonderful to hear, I appreciate you calling in to tell us."],
         "summary": "Customer called to praise a fast delivery and a courteous driver.",
+        "reason": "Unprompted praise for delivery speed and driver",
     },
     {
         "intent": "payment_issue", "sentiment": "negative", "confidence": 0.81,
@@ -310,6 +313,7 @@ CALL_SCENARIOS = [
         "customer": ["شكرا لكم، الطلب وصل بسرعة والخدمة رائعة."],
         "agent": ["يسعدنا سماع ذلك، شكرا لتواصلك معنا."],
         "summary": "Customer called to thank the team for a fast delivery.",
+        "reason": "Unprompted thanks for a fast delivery",
         "arabic": True,
     },
 ]
@@ -321,7 +325,36 @@ AREAS = ZONES[:12]
 # outnumbering the rest three to one.
 _SENTIMENT_WEIGHT = {"negative": 3, "neutral": 6, "positive": 6}
 _MSG_WEIGHTS = [_SENTIMENT_WEIGHT[t[0]] for t in MESSAGE_TEMPLATES]
-_CALL_WEIGHTS = [{"negative": 2, "neutral": 3, "positive": 4}[s["sentiment"]] for s in CALL_SCENARIOS]
+
+# Inbound CALL mix is weighted by intent, not by sentiment: people phone a
+# food-delivery support line because something went wrong or they want a status.
+# Almost nobody calls to say thank you — praise arrives via ratings and reviews,
+# not the phone queue. Shares are percentages of all calls.
+_CALL_INTENT_MIX = {
+    "delivery_issue":  24,
+    "order_status":    18,
+    "wrong_item":      13,
+    "refund_request":  12,
+    "payment_issue":    9,
+    "cancellation":     8,
+    "complaint":        7,
+    "account_issue":    5,
+    "escalation":       3,
+    "general_inquiry":  1,
+    # Rare but real — kept non-zero so the positive-sentiment path still has data.
+    "praise":           1,
+}
+
+
+def _call_weights() -> list[float]:
+    """Split each intent's share evenly across the templates that carry it."""
+    per_intent: dict[str, int] = {}
+    for sc in CALL_SCENARIOS:
+        per_intent[sc["intent"]] = per_intent.get(sc["intent"], 0) + 1
+    return [_CALL_INTENT_MIX[sc["intent"]] / per_intent[sc["intent"]] for sc in CALL_SCENARIOS]
+
+
+_CALL_WEIGHTS = _call_weights()
 
 # ---------------------------------------------------------------------------
 # Added for the simulator (not in the original generator)
@@ -343,3 +376,38 @@ MESSAGE_CHANNELS = ["app", "whatsapp", "ticket"]
 MESSAGE_CHANNEL_WEIGHTS = [6, 3, 1]
 
 CANCELLED_BY_INT = {"Vendor": 2, "Customer": 1, "Clarity Ops": 3, "Driver": 4}
+
+
+# ---------------------------------------------------------------------------
+# Call reason
+# ---------------------------------------------------------------------------
+#
+# Ported from backend/app/services/call_service.derive_reason. Duplicated
+# rather than imported because the simulator is a standalone service with its
+# own image and no backend dependency — the same reason corpus.py exists at all.
+# If the backend's version changes, change this one too; the call-reasons panel
+# reads whatever the simulator writes.
+
+_GENERIC_REASON = _re.compile(
+    r"^(general|generic|support|customer service|customer care|misc\w*|other|"
+    r"inquiry|enquiry|general inquiry|general enquiry|n/?a|unknown)$",
+    _re.IGNORECASE,
+)
+_LEAD_FILLER = _re.compile(
+    r"^(the\s+)?(customer|caller|client)\s+(called|phoned|contacted\s+\w+)\s+"
+    r"(to|about|regarding|because)\s+|^general\s+|^routine\s+",
+    _re.IGNORECASE,
+)
+
+
+def derive_reason(reason: str, summary: str, intent: str) -> str:
+    """Specific, human-readable reason for a call. Never returns "General"."""
+    for candidate in (reason, summary):
+        text = (candidate or "").strip()
+        if not text:
+            continue
+        text = _re.split(r"[;.]", text)[0].strip()
+        text = _LEAD_FILLER.sub("", text).strip(" .,-")
+        if text and not _GENERIC_REASON.match(text):
+            return text[0].upper() + text[1:]
+    return intent.replace("_", " ").title()

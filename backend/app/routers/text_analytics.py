@@ -12,6 +12,7 @@ from app.models.schemas import (
     SentimentTrendResponse, TopTriggersResponse, ZoneHeatmapResponse,
 )
 from app.services import text_analytics_service as svc
+from app.services import zones
 from app.services import verticals
 
 router = APIRouter(prefix="/api/v1/analytics", tags=["text-analytics"])
@@ -37,11 +38,23 @@ def _vertical(vertical: Optional[str]) -> Optional[str]:
     return vertical
 
 
+def _zone(zone: Optional[str]) -> Optional[str]:
+    """Whitelist-validate the zone filter (safe to interpolate downstream).
+
+    An empty string or "all" means no zone predicate, not a zone named "".
+    """
+    if zone is None or zone == "" or zone == "all":
+        return None
+    if not zones.is_valid(zone):
+        raise HTTPException(status_code=422, detail=f"unknown zone: {zone}")
+    return zone
+
+
 @router.get("/sentiment-trend", response_model=SentimentTrendResponse)
 async def sentiment_trend(start: Optional[str] = Query(None), end: Optional[str] = Query(None),
-                          vertical: Optional[str] = Query(None)):
+                          vertical: Optional[str] = Query(None), zone: Optional[str] = Query(None)):
     try:
-        return await svc.get_sentiment_trend(*_window(start, end), _vertical(vertical))
+        return await svc.get_sentiment_trend(*_window(start, end), _vertical(vertical), _zone(zone))
     except HTTPException:
         raise
     except Exception as exc:
@@ -62,7 +75,7 @@ async def top_negative_triggers(
     s, e = _window(start, end)
     try:
         return await svc.get_top_negative_triggers(
-            merchant=merchant, zone=zone, time_of_day=time_of_day, start=s, end=e,
+            merchant=merchant, zone=_zone(zone), time_of_day=time_of_day, start=s, end=e,
             vertical=_vertical(vertical),
         )
     except HTTPException:
@@ -73,9 +86,9 @@ async def top_negative_triggers(
 
 @router.get("/cross-channel", response_model=CrossChannelResponse)
 async def cross_channel(start: Optional[str] = Query(None), end: Optional[str] = Query(None),
-                        vertical: Optional[str] = Query(None)):
+                        vertical: Optional[str] = Query(None), zone: Optional[str] = Query(None)):
     try:
-        return await svc.get_cross_channel(*_window(start, end), _vertical(vertical))
+        return await svc.get_cross_channel(*_window(start, end), _vertical(vertical), _zone(zone))
     except HTTPException:
         raise
     except Exception as exc:
@@ -111,10 +124,23 @@ async def message_overview(
     chat_sla_hours: float = Query(4.0, gt=0),
     general_sla_hours: float = Query(24.0, gt=0),
     vertical: Optional[str] = Query(None),
+    zone: Optional[str] = Query(None),
 ):
     s, e = _window(start, end)
     try:
-        return await svc.get_message_overview(s, e, chat_sla_hours, general_sla_hours, _vertical(vertical))
+        return await svc.get_message_overview(
+            s, e, chat_sla_hours, general_sla_hours, _vertical(vertical), _zone(zone))
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.get("/handled-by")
+async def handled_by(start: Optional[str] = Query(None), end: Optional[str] = Query(None),
+                     vertical: Optional[str] = Query(None), zone: Optional[str] = Query(None)):
+    try:
+        return await svc.get_handled_by(*_window(start, end), _vertical(vertical), _zone(zone))
     except HTTPException:
         raise
     except Exception as exc:

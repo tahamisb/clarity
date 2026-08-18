@@ -21,27 +21,50 @@ import { useT, useTV } from "@/lib/i18n"
 export type ColumnDef<T> = { id: string; accessor: (row: T) => string }
 export type ColumnFilterState = Record<string, Set<string> | null>
 
+/**
+ * Apply a column-filter selection to a row set.
+ *
+ * Exported so a page can run the SAME filter over its charts as the table runs
+ * over its rows — otherwise a header filter silently scopes only the table and
+ * every other card on the page keeps showing the unfiltered totals.
+ *
+ * `skip` excludes one column, which is how a column's own dropdown keeps
+ * listing every value instead of collapsing to the one already picked.
+ */
+export function applyColumnFilters<T>(
+  rows: T[],
+  columns: ColumnDef<T>[],
+  selected: ColumnFilterState,
+  skip?: string,
+): T[] {
+  const active = columns.filter((c) => c.id !== skip && selected[c.id] != null)
+  if (active.length === 0) return rows
+  return rows.filter((r) => active.every((c) => selected[c.id]!.has(String(c.accessor(r)))))
+}
+
+/** Distinct values per column, for the dropdowns. */
+export function distinctValues<T>(rows: T[], columns: ColumnDef<T>[]): Record<string, string[]> {
+  const map: Record<string, string[]> = {}
+  for (const col of columns) {
+    const set = new Set<string>()
+    for (const r of rows) {
+      const v = col.accessor(r)
+      if (v != null && String(v) !== "") set.add(String(v))
+    }
+    map[col.id] = Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+  }
+  return map
+}
+
 export function useColumnFilters<T>(rows: T[], columns: ColumnDef<T>[]) {
   const [selected, setSelectedState] = useState<ColumnFilterState>({})
 
-  const distinct = useMemo(() => {
-    const map: Record<string, string[]> = {}
-    for (const col of columns) {
-      const set = new Set<string>()
-      for (const r of rows) {
-        const v = col.accessor(r)
-        if (v != null && String(v) !== "") set.add(String(v))
-      }
-      map[col.id] = Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
-    }
-    return map
-  }, [rows, columns])
+  const distinct = useMemo(() => distinctValues(rows, columns), [rows, columns])
 
-  const filteredRows = useMemo(() => {
-    const active = columns.filter((c) => selected[c.id] != null)
-    if (active.length === 0) return rows
-    return rows.filter((r) => active.every((c) => selected[c.id]!.has(String(c.accessor(r)))))
-  }, [rows, columns, selected])
+  const filteredRows = useMemo(
+    () => applyColumnFilters(rows, columns, selected),
+    [rows, columns, selected],
+  )
 
   const setSelected = (id: string, next: Set<string> | null) =>
     setSelectedState((s) => ({ ...s, [id]: next }))

@@ -63,7 +63,8 @@ COLUMNS: dict[str, tuple[str, ...]] = {
     "warehouse.call_analysis": (
         "call_id", "transcript", "intents", "primary_intent", "sentiment",
         "sentiment_confidence", "order_ids", "restaurant_names", "areas",
-        "product_names", "qar_amounts", "summary", "analysed_at", "sim_emitted_at",
+        "product_names", "qar_amounts", "summary", "call_reason", "analysed_at",
+        "sim_emitted_at",
     ),
     "warehouse.cancellation_predictions": (
         "order_id", "engine", "probability", "risk_level", "flagged", "threshold",

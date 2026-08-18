@@ -155,6 +155,7 @@ SELECT
     product_names::text      AS product_names,
     qar_amounts::text        AS qar_amounts,
     summary,
+    call_reason,
     analysed_at
 FROM warehouse.call_analysis;
 

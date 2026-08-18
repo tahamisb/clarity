@@ -25,6 +25,7 @@ from app.services.chat_service import chat_with_data
 from app.services.gemini_service import call_with_retry
 from app.services.warehouse import countif, safe_divide
 from app.services.verticals import normalize, vertical_case, vertical_pred
+from app.services.zones import zone_pred
 from app.utils.helpers import extract_json, utcnow_iso
 
 logger = logging.getLogger(__name__)
@@ -72,10 +73,12 @@ _EXCLUDE_INTERNAL = (
 )
 
 
-def _preds(start: str | None, end: str | None, vertical: str | None = None) -> str:
-    """Combined date + vertical + internal-account WHERE fragment
-    (vertical whitelisted by the router)."""
-    return _date_pred(start, end) + vertical_pred(vertical) + _EXCLUDE_INTERNAL
+def _preds(start: str | None, end: str | None, vertical: str | None = None,
+           zone: str | None = None) -> str:
+    """Combined date + vertical + zone + internal-account WHERE fragment
+    (vertical and zone whitelisted by the router)."""
+    return (_date_pred(start, end) + vertical_pred(vertical)
+            + zone_pred(zone) + _EXCLUDE_INTERNAL)
 
 
 # Dominant vertical of a merchant/zone group — normalized python-side.
@@ -143,8 +146,9 @@ def clear_cache() -> None:
 # Exploration analytics — one function per artifact JSON
 # ---------------------------------------------------------------------------
 
-def _trend_sync(start: str | None = None, end: str | None = None, vertical: str | None = None) -> dict:
-    pred = _preds(start, end, vertical)
+def _trend_sync(start: str | None = None, end: str | None = None, vertical: str | None = None,
+                     zone: str | None = None) -> dict:
+    pred = _preds(start, end, vertical, zone)
 
     def q(period: str) -> list[dict]:
         return _run(f"""
@@ -162,8 +166,9 @@ def _trend_sync(start: str | None = None, end: str | None = None, vertical: str 
     }
 
 
-def _by_merchant_sync(start: str | None = None, end: str | None = None, vertical: str | None = None) -> dict:
-    pred = _preds(start, end, vertical)
+def _by_merchant_sync(start: str | None = None, end: str | None = None, vertical: str | None = None,
+                     zone: str | None = None) -> dict:
+    pred = _preds(start, end, vertical, zone)
     # HAVING repeats COUNT(*) rather than naming the total_orders alias:
     # Postgres does not expose SELECT aliases to HAVING, and SQLite's
     # leniency there is the outlier. Same in the other four HAVINGs below.
@@ -184,8 +189,9 @@ def _by_merchant_sync(start: str | None = None, end: str | None = None, vertical
     return {"by_volume": by_volume, "by_rate": by_rate}
 
 
-def _by_zone_sync(start: str | None = None, end: str | None = None, vertical: str | None = None) -> dict:
-    pred = _preds(start, end, vertical)
+def _by_zone_sync(start: str | None = None, end: str | None = None, vertical: str | None = None,
+                     zone: str | None = None) -> dict:
+    pred = _preds(start, end, vertical, zone)
 
     def q(col: str) -> list[dict]:
         return _with_vertical(_run(f"""
@@ -203,8 +209,9 @@ def _by_zone_sync(start: str | None = None, end: str | None = None, vertical: st
     return {"by_zone_name": q("zone_name"), "by_customer_zone": q("customer_zone")}
 
 
-def _by_time_sync(start: str | None = None, end: str | None = None, vertical: str | None = None) -> list[dict]:
-    pred = _preds(start, end, vertical)
+def _by_time_sync(start: str | None = None, end: str | None = None, vertical: str | None = None,
+                     zone: str | None = None) -> list[dict]:
+    pred = _preds(start, end, vertical, zone)
     return _run(f"""
         WITH bucketed AS (
           SELECT order_status, {_TIME_BUCKET} AS time_bucket
@@ -221,8 +228,31 @@ def _by_time_sync(start: str | None = None, end: str | None = None, vertical: st
     """)
 
 
-def _by_dow_sync(start: str | None = None, end: str | None = None, vertical: str | None = None) -> list[dict]:
-    pred = _preds(start, end, vertical)
+def _by_hour_sync(start: str | None = None, end: str | None = None, vertical: str | None = None,
+                     zone: str | None = None) -> list[dict]:
+    """Cancellation rate per hour of day (0-23) — the finer-grained companion to
+    _by_time_sync's five named buckets."""
+    pred = _preds(start, end, vertical, zone)
+    return _run(f"""
+        WITH hourly AS (
+          SELECT order_status, {_ORDER_HOUR} AS hour
+          FROM {_T}
+          WHERE order_placement_time IS NOT NULL{pred}
+        )
+        SELECT hour,
+          COUNT(*)       AS total_orders,
+          {_N_CANCELLED} AS cancelled,
+          {_RATE_PCT}    AS cancel_rate_pct
+        FROM hourly
+        WHERE hour BETWEEN 0 AND 23
+        GROUP BY hour
+        ORDER BY hour
+    """)
+
+
+def _by_dow_sync(start: str | None = None, end: str | None = None, vertical: str | None = None,
+                     zone: str | None = None) -> list[dict]:
+    pred = _preds(start, end, vertical, zone)
     return _run(f"""
         SELECT day_name(order_placement_date) AS day_of_week,
           CAST(strftime('%w', order_placement_date) AS INTEGER) + 1 AS dow_index,
@@ -236,8 +266,9 @@ def _by_dow_sync(start: str | None = None, end: str | None = None, vertical: str
     """)
 
 
-def _by_order_size_sync(start: str | None = None, end: str | None = None, vertical: str | None = None) -> list[dict]:
-    pred = _preds(start, end, vertical)
+def _by_order_size_sync(start: str | None = None, end: str | None = None, vertical: str | None = None,
+                     zone: str | None = None) -> list[dict]:
+    pred = _preds(start, end, vertical, zone)
     return _run(f"""
         WITH q AS (
           SELECT total_order_value, order_status,
@@ -255,8 +286,9 @@ def _by_order_size_sync(start: str | None = None, end: str | None = None, vertic
     """)
 
 
-def _by_actor_sync(start: str | None = None, end: str | None = None, vertical: str | None = None) -> list[dict]:
-    pred = _preds(start, end, vertical)
+def _by_actor_sync(start: str | None = None, end: str | None = None, vertical: str | None = None,
+                     zone: str | None = None) -> list[dict]:
+    pred = _preds(start, end, vertical, zone)
     return _run(f"""
         SELECT COALESCE(NULLIF(TRIM(cancelled_by_txt), ''), 'Unknown') AS cancelled_by,
           COUNT(*)                                  AS cancellations,
@@ -268,10 +300,11 @@ def _by_actor_sync(start: str | None = None, end: str | None = None, vertical: s
     """)
 
 
-def _by_reason_sync(start: str | None = None, end: str | None = None, vertical: str | None = None) -> list[dict]:
+def _by_reason_sync(start: str | None = None, end: str | None = None, vertical: str | None = None,
+                     zone: str | None = None) -> list[dict]:
     """Stated cancellation reasons (first segment of cancel_comment) with who
     cancelled — the closest thing to ground-truth causes in the data."""
-    pred = _preds(start, end, vertical)
+    pred = _preds(start, end, vertical, zone)
     return _run(f"""
         SELECT
           COALESCE(NULLIF(TRIM(split_first(cancel_comment, '//')), ''), 'No reason given') AS reason,
@@ -286,8 +319,9 @@ def _by_reason_sync(start: str | None = None, end: str | None = None, vertical: 
     """)
 
 
-def _crosstabs_sync(start: str | None = None, end: str | None = None, vertical: str | None = None) -> dict:
-    pred = _preds(start, end, vertical)
+def _crosstabs_sync(start: str | None = None, end: str | None = None, vertical: str | None = None,
+                     zone: str | None = None) -> dict:
+    pred = _preds(start, end, vertical, zone)
     # Full zone × time-bucket grid for the riskiest zones (highest cancel rate
     # with meaningful volume) — every bucket is returned for each zone so the
     # heatmap has no holes, unlike a flat "top 20 worst cells" ranking.
@@ -362,10 +396,11 @@ def _crosstabs_sync(start: str | None = None, end: str | None = None, vertical: 
     return {"zone_x_time": zone_time, "merchant_x_dow": merchant_dow, "merchant_x_zone": merchant_zone}
 
 
-def _by_vertical_sync(start: str | None = None, end: str | None = None) -> list[dict]:
+def _by_vertical_sync(start: str | None = None, end: str | None = None,
+                      zone: str | None = None) -> list[dict]:
     """Cancellation breakdown across the canonical verticals (renames merged,
     NULL/junk platforms excluded), each carrying its top contributing merchants."""
-    pred = _preds(start, end)
+    pred = _preds(start, end, None, zone)
     verticals_rows = _run(f"""
         SELECT {vertical_case('platform_name')} AS vertical,
           COUNT(*)       AS total_orders,
@@ -442,48 +477,75 @@ async def _run_async(fn, *args):
     return await loop.run_in_executor(None, fn, *args)
 
 
-def _key(base: str, start: str | None, end: str | None, vertical: str | None = None) -> str:
-    return f"{base}:{start or ''}:{end or ''}:{vertical or ''}"
+def _key(base: str, start: str | None, end: str | None, vertical: str | None = None,
+         zone: str | None = None) -> str:
+    return f"{base}:{start or ''}:{end or ''}:{vertical or ''}:{zone or ''}"
 
 
-async def get_trend(start: str | None = None, end: str | None = None, vertical: str | None = None) -> dict:
-    return await _cached(_key("trend", start, end, vertical), lambda: _run_async(_trend_sync, start, end, vertical))
+async def get_trend(start: str | None = None, end: str | None = None, vertical: str | None = None,
+          zone: str | None = None) -> dict:
+    return await _cached(_key("trend", start, end, vertical, zone),
+                         lambda: _run_async(_trend_sync, start, end, vertical, zone))
 
 
-async def get_by_merchant(start: str | None = None, end: str | None = None, vertical: str | None = None) -> dict:
-    return await _cached(_key("by_merchant", start, end, vertical), lambda: _run_async(_by_merchant_sync, start, end, vertical))
+async def get_by_merchant(start: str | None = None, end: str | None = None, vertical: str | None = None,
+          zone: str | None = None) -> dict:
+    return await _cached(_key("by_merchant", start, end, vertical, zone),
+                         lambda: _run_async(_by_merchant_sync, start, end, vertical, zone))
 
 
-async def get_by_zone(start: str | None = None, end: str | None = None, vertical: str | None = None) -> dict:
-    return await _cached(_key("by_zone", start, end, vertical), lambda: _run_async(_by_zone_sync, start, end, vertical))
+async def get_by_zone(start: str | None = None, end: str | None = None, vertical: str | None = None,
+          zone: str | None = None) -> dict:
+    return await _cached(_key("by_zone", start, end, vertical, zone),
+                         lambda: _run_async(_by_zone_sync, start, end, vertical, zone))
 
 
-async def get_by_time(start: str | None = None, end: str | None = None, vertical: str | None = None) -> list[dict]:
-    return await _cached(_key("by_time", start, end, vertical), lambda: _run_async(_by_time_sync, start, end, vertical))
+async def get_by_time(start: str | None = None, end: str | None = None, vertical: str | None = None,
+          zone: str | None = None) -> list[dict]:
+    return await _cached(_key("by_time", start, end, vertical, zone),
+                         lambda: _run_async(_by_time_sync, start, end, vertical, zone))
 
 
-async def get_by_dow(start: str | None = None, end: str | None = None, vertical: str | None = None) -> list[dict]:
-    return await _cached(_key("by_dow", start, end, vertical), lambda: _run_async(_by_dow_sync, start, end, vertical))
+async def get_by_hour(start: str | None = None, end: str | None = None, vertical: str | None = None,
+          zone: str | None = None) -> list[dict]:
+    return await _cached(_key("by_hour", start, end, vertical, zone),
+                         lambda: _run_async(_by_hour_sync, start, end, vertical, zone))
 
 
-async def get_by_order_size(start: str | None = None, end: str | None = None, vertical: str | None = None) -> list[dict]:
-    return await _cached(_key("by_order_size", start, end, vertical), lambda: _run_async(_by_order_size_sync, start, end, vertical))
+async def get_by_dow(start: str | None = None, end: str | None = None, vertical: str | None = None,
+          zone: str | None = None) -> list[dict]:
+    return await _cached(_key("by_dow", start, end, vertical, zone),
+                         lambda: _run_async(_by_dow_sync, start, end, vertical, zone))
 
 
-async def get_by_actor(start: str | None = None, end: str | None = None, vertical: str | None = None) -> list[dict]:
-    return await _cached(_key("by_actor", start, end, vertical), lambda: _run_async(_by_actor_sync, start, end, vertical))
+async def get_by_order_size(start: str | None = None, end: str | None = None, vertical: str | None = None,
+          zone: str | None = None) -> list[dict]:
+    return await _cached(_key("by_order_size", start, end, vertical, zone),
+                         lambda: _run_async(_by_order_size_sync, start, end, vertical, zone))
 
 
-async def get_crosstabs(start: str | None = None, end: str | None = None, vertical: str | None = None) -> dict:
-    return await _cached(_key("crosstabs", start, end, vertical), lambda: _run_async(_crosstabs_sync, start, end, vertical))
+async def get_by_actor(start: str | None = None, end: str | None = None, vertical: str | None = None,
+          zone: str | None = None) -> list[dict]:
+    return await _cached(_key("by_actor", start, end, vertical, zone),
+                         lambda: _run_async(_by_actor_sync, start, end, vertical, zone))
 
 
-async def get_by_vertical(start: str | None = None, end: str | None = None) -> list[dict]:
-    return await _cached(_key("by_vertical", start, end), lambda: _run_async(_by_vertical_sync, start, end))
+async def get_crosstabs(start: str | None = None, end: str | None = None, vertical: str | None = None,
+          zone: str | None = None) -> dict:
+    return await _cached(_key("crosstabs", start, end, vertical, zone),
+                         lambda: _run_async(_crosstabs_sync, start, end, vertical, zone))
 
 
-async def get_by_reason(start: str | None = None, end: str | None = None, vertical: str | None = None) -> list[dict]:
-    return await _cached(_key("by_reason", start, end, vertical), lambda: _run_async(_by_reason_sync, start, end, vertical))
+async def get_by_vertical(start: str | None = None, end: str | None = None,
+                          zone: str | None = None) -> list[dict]:
+    return await _cached(_key("by_vertical", start, end, None, zone),
+                         lambda: _run_async(_by_vertical_sync, start, end, zone))
+
+
+async def get_by_reason(start: str | None = None, end: str | None = None, vertical: str | None = None,
+          zone: str | None = None) -> list[dict]:
+    return await _cached(_key("by_reason", start, end, vertical, zone),
+                         lambda: _run_async(_by_reason_sync, start, end, vertical, zone))
 
 
 # Mapping used by the exploration script to write artifact JSONs.

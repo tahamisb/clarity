@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
-  Activity, Ban, MessageCircle,
+  Activity, Ban, MessageCircle, Lightbulb,
   TrendingUp, TrendingDown, AlertTriangle, ArrowRight, HeartPulse, ShieldAlert
 } from "lucide-react"
 import { Sidebar } from "@/components/clarity/sidebar"
@@ -23,10 +23,13 @@ import { cn } from "@/lib/utils"
 
 import {
   fetchCalls, fetchAllMessagesData, fetchCancelTrend, fetchCancelByZone,
-  fetchFeatureImportance, fetchCancelByActor, fetchContactRate, clearServerCache,
+  fetchFeatureImportance, fetchCancelByActor, fetchContactRate, clearServerCache, fetchZones,
   type TriggerItem, type TrendItem, type CancelTrend, type CancelByZone,
   type FeatureImportance, type ActorRow, type ContactRate,
+  type CrossChannelItem, type HandledBy,
 } from "@/lib/api"
+import { CrossChannelComparison } from "@/components/clarity/cross-channel-comparison"
+import { HandledByPanel } from "@/components/clarity/handled-by"
 import type { CallRecord } from "@/lib/clarity-data"
 import type { SupportMessage } from "@/lib/mock-messages"
 import { GlobalVerticalSelect } from "@/components/clarity/vertical-select"
@@ -92,18 +95,29 @@ export default function CxDashboardPage() {
   const [featImp, setFeatImp] = useState<FeatureImportance | null>(null)
   const [cancelActors, setCancelActors] = useState<ActorRow[] | null>(null)
   const [contactRate, setContactRate] = useState<ContactRate | null>(null)
+  // Cross-channel comparison lives here (moved off the Messages page) — it is a
+  // channel-level read, which is a CX-leadership question, not a message-feed one.
+  const [crossChannel, setCrossChannel] = useState<CrossChannelItem[] | undefined>(undefined)
+  const [handledBy, setHandledBy] = useState<HandledBy | null>(null)
 
   // App-wide time-range + vertical filters. Calls/messages carry per-record
   // dates/verticals (filtered client-side); the cancellation aggregates are
   // re-queried server-side.
   const { range, vertical, setVertical, queryKey } = useTimeFilter()
 
-  // Secondary zone selector remains a visual placeholder.
-  const [zoneFilter, setZoneFilter] = useState("All Zones")
+  // Zone scope. Orders, messages and calls all use the same zone vocabulary,
+  // so one selection is applied server-side to the aggregates and client-side
+  // to the record-level sources below. "all" ⇒ no zone predicate.
+  const [zone, setZone] = useState<string>("all")
+  const [zoneOptions, setZoneOptions] = useState<string[]>([])
+
+  useEffect(() => {
+    fetchZones().then(setZoneOptions)
+  }, [])
 
   const resetFilters = () => {
-    setZoneFilter("All Zones")
     setVertical("all")
+    setZone("all")
   }
 
   const loadData = useCallback((r: TimeRange, background = false, bust = false) => {
@@ -114,11 +128,13 @@ export default function CxDashboardPage() {
     const ready = bust ? clearServerCache() : Promise.resolve()
     ready.then(() => Promise.all([
       fetchCalls(),
-      fetchAllMessagesData(r, 4, 24, vertical),
-      fetchCancelTrend(r, vertical),
+      fetchAllMessagesData(r, 4, 24, vertical, zone),
+      fetchCancelTrend(r, vertical, zone),
+      // Unscoped on purpose: this chart IS the zone comparison, so it keeps
+      // every zone and highlights the selected one instead of collapsing to it.
       fetchCancelByZone(r, vertical),
       fetchFeatureImportance(),
-      fetchCancelByActor(r, vertical),
+      fetchCancelByActor(r, vertical, zone),
       fetchContactRate(r),
     ])).then(([callsData, msgs, cTrend, cZones, fImp, actors, cRate]) => {
       setCalls(callsData ?? [])
@@ -126,6 +142,8 @@ export default function CxDashboardPage() {
       setMsgTotal(msgs.overview?.total ?? 0)
       setEscalationPct(msgs.overview?.escalationPct ?? null)
       setTriggers(msgs.triggers ?? [])
+      setCrossChannel(msgs.crossChannel ?? undefined)
+      setHandledBy(msgs.handledBy ?? null)
       setMsgTrend(msgs.trend ?? [])
       setCancelTrend(cTrend)
       setCancelZones(cZones)
@@ -136,7 +154,7 @@ export default function CxDashboardPage() {
       if (background) setRefreshing(false)
       else setLoading(false)
     })
-  }, [vertical])
+  }, [vertical, zone])
 
   // Initial load (full skeleton) once.
   useEffect(() => {
@@ -150,7 +168,7 @@ export default function CxDashboardPage() {
     if (firstRange.current) { firstRange.current = false; return }
     loadData(range, true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queryKey])
+  }, [queryKey, zone])
 
   useAutoRefresh(() => loadData(range, true))
 
@@ -160,14 +178,16 @@ export default function CxDashboardPage() {
       vertical === "all" ? rows : rows.filter((r) => r.vertical === vertical),
     [vertical],
   )
-  const scopedCalls = useMemo(
-    () => byVertical(filterByRange(calls, range, (c) => c.datetime)),
-    [calls, range, byVertical],
-  )
-  const scopedMessages = useMemo(
-    () => byVertical(filterByRange(messages, range, (m) => m.date)),
-    [messages, range, byVertical],
-  )
+  // Calls and the raw message feed are filtered here rather than server-side;
+  // a call's zone is the first area named in its transcript.
+  const scopedCalls = useMemo(() => {
+    const rows = byVertical(filterByRange(calls, range, (c) => c.datetime))
+    return zone === "all" ? rows : rows.filter((c) => c.city === zone)
+  }, [calls, range, byVertical, zone])
+  const scopedMessages = useMemo(() => {
+    const rows = byVertical(filterByRange(messages, range, (m) => m.date))
+    return zone === "all" ? rows : rows.filter((m) => m.zone === zone)
+  }, [messages, range, byVertical, zone])
 
   // -------------------------------------------------------------------------
   // Derived sentiment counts (calls + messages)
@@ -356,6 +376,201 @@ export default function CxDashboardPage() {
 
   const totalInteractions = scopedCalls.length + msgTotal
 
+  // ---------------------------------------------------------------------------
+  // Per-chart insights — one plain-language read for every graph on this page,
+  // derived from the same series the chart draws (no second source of truth).
+  // Each returns null when its series is too thin to say anything honest.
+  // ---------------------------------------------------------------------------
+  const callVolumeInsight = useMemo(() => {
+    if (weeklyCallsVolume.length < 2) return null
+    const last = weeklyCallsVolume[weeklyCallsVolume.length - 1]
+    const prev = weeklyCallsVolume[weeklyCallsVolume.length - 2]
+    const sum = (w: typeof last) => w.billing + w.technical + w.complaints
+    const prevTotal = sum(prev)
+    const delta = prevTotal === 0 ? null : ((sum(last) - prevTotal) / prevTotal) * 100
+    const mix = ([
+      ["cx.catBilling", last.billing],
+      ["cx.catTechnical", last.technical],
+      ["cx.catComplaints", last.complaints],
+    ] as const).slice().sort((a, b) => b[1] - a[1])[0]
+    return t("cx.insightCallVolume", {
+      total: sum(last),
+      dir: delta === null ? "—" : t(delta >= 0 ? "cx.up" : "cx.down"),
+      delta: delta === null ? "0" : Math.abs(delta).toFixed(0),
+      top: t(mix[0]),
+      topN: mix[1],
+    })
+  }, [weeklyCallsVolume, t])
+
+  const callSentimentInsight = useMemo(() => {
+    if (!weeklyCallSentiment.length) return null
+    const last = weeklyCallSentiment[weeklyCallSentiment.length - 1]
+    const total = last.positive + last.neutral + last.negative
+    if (!total) return null
+    const negPct = (last.negative / total) * 100
+    const prev = weeklyCallSentiment[weeklyCallSentiment.length - 2]
+    const prevTotal = prev ? prev.positive + prev.neutral + prev.negative : 0
+    const prevNeg = prevTotal ? (prev.negative / prevTotal) * 100 : null
+    return t("cx.insightCallSentiment", {
+      neg: negPct.toFixed(1),
+      trend: prevNeg === null
+        ? t("cx.noPriorWeek")
+        : t(negPct >= prevNeg ? "cx.worseThanPrior" : "cx.betterThanPrior", { pts: Math.abs(negPct - prevNeg).toFixed(1) }),
+    })
+  }, [weeklyCallSentiment, t])
+
+  const complaintsInsight = useMemo(() => {
+    if (!topComplaints.length) return null
+    const first = topComplaints[0]
+    const share = scopedCalls.length ? (first.count / scopedCalls.length) * 100 : 0
+    return t("cx.insightComplaints", { name: tv(first.name), count: first.count, share: share.toFixed(0) })
+  }, [topComplaints, scopedCalls.length, t, tv])
+
+  const sentimentScoreInsight = useMemo(() => {
+    if (weeklySentimentScore.length < 2) return null
+    const last = weeklySentimentScore[weeklySentimentScore.length - 1]
+    const first = weeklySentimentScore[0]
+    const diff = last.score - first.score
+    return t("cx.insightSentimentScore", {
+      score: last.score.toFixed(1),
+      dir: t(diff >= 0 ? "cx.improved" : "cx.declined"),
+      diff: Math.abs(diff).toFixed(1),
+      weeks: weeklySentimentScore.length,
+    })
+  }, [weeklySentimentScore, t])
+
+  const negativeTopicsInsight = useMemo(() => {
+    if (!topNegativeTopics.length) return null
+    const total = topNegativeTopics.reduce((sum, x) => sum + x.count, 0) || 1
+    const first = topNegativeTopics[0]
+    return t("cx.insightNegTopics", {
+      topic: first.topic,
+      count: first.count.toLocaleString(),
+      share: ((first.count / total) * 100).toFixed(0),
+    })
+  }, [topNegativeTopics, t])
+
+  const cancelTrendInsight = useMemo(() => {
+    if (weeklyCancellations.length < 2) return null
+    const last = weeklyCancellations[weeklyCancellations.length - 1]
+    const prev = weeklyCancellations[weeklyCancellations.length - 2]
+    const peak = weeklyCancellations.reduce((a, b) => (b.rate > a.rate ? b : a))
+    return t("cx.insightCancelTrend", {
+      rate: last.rate.toFixed(1),
+      dir: t(last.rate >= prev.rate ? "cx.up" : "cx.down"),
+      pts: Math.abs(last.rate - prev.rate).toFixed(1),
+      peakWeek: peak.week,
+      peakRate: peak.rate.toFixed(1),
+    })
+  }, [weeklyCancellations, t])
+
+  const driversInsight = useMemo(() => {
+    if (!cancelDrivers.rows.length) return null
+    const first = cancelDrivers.rows[0]
+    return t(cancelDrivers.byActor ? "cx.insightCancelActor" : "cx.insightCancelDriver", {
+      name: tv(first.name), pct: first.percentage,
+    })
+  }, [cancelDrivers, t, tv])
+
+  const healthInsight = useMemo(() => {
+    if (health.trend.length < 2) return null
+    const last = health.trend[health.trend.length - 1]
+    const prev = health.trend[health.trend.length - 2]
+    return t("cx.insightHealth", {
+      score: health.score,
+      label: health.label,
+      dir: t(last.score >= prev.score ? "cx.up" : "cx.down"),
+      pts: Math.abs(last.score - prev.score),
+    })
+  }, [health, t])
+
+  // ---------------------------------------------------------------------------
+  // Executive summary — one read across Calls, Messages and Cancellations.
+  // Deterministic prose over the same numbers the panels below show, so it can
+  // never drift from them (and costs nothing to produce).
+  // ---------------------------------------------------------------------------
+  const execSummary = useMemo(() => {
+    const verdict = t("cx.execVerdict", {
+      label: health.label.toLowerCase(),
+      score: health.score,
+      interactions: totalInteractions.toLocaleString(),
+      sentiment: sentimentScore.toFixed(1),
+    })
+
+    const points: { key: string; text: string; tone: "positive" | "neutral" | "negative" }[] = []
+
+    // Volume mix across the two contact channels.
+    points.push({
+      key: "volume",
+      tone: "neutral",
+      text: t("cx.execVolume", {
+        calls: scopedCalls.length.toLocaleString(),
+        messages: msgTotal.toLocaleString(),
+        contact: contactRate ? contactRate.contact_rate_pct.toFixed(1) + "%" : "—",
+      }),
+    })
+
+    // What customers are actually calling about.
+    if (topComplaints.length) {
+      points.push({
+        key: "calls",
+        tone: "negative",
+        text: t("cx.execCalls", { name: tv(topComplaints[0].name), count: topComplaints[0].count }),
+      })
+    }
+
+    // Who is doing the handling, and how each one's conversations land.
+    const bot = handledBy?.handlers.find((h) => h.handler === "Bot")
+    const agent = handledBy?.handlers.find((h) => h.handler === "Agent")
+    if (bot && agent && handledBy && handledBy.total > 0) {
+      points.push({
+        key: "handled",
+        tone: bot.negative_pct > agent.negative_pct ? "negative" : "positive",
+        text: t("cx.execHandled", {
+          botPct: bot.share_pct, agentPct: agent.share_pct,
+          botNeg: bot.negative_pct, agentNeg: agent.negative_pct,
+        }),
+      })
+    }
+
+    // Loudest negative driver in the text channels.
+    if (triggers.length) {
+      points.push({
+        key: "sentiment",
+        tone: "negative",
+        text: t("cx.execSentiment", { trigger: triggers[0].trigger, volume: triggers[0].volume.toLocaleString() }),
+      })
+    }
+
+    // Cancellation pressure and where it is worst.
+    points.push({
+      key: "cancel",
+      tone: cancellationRate >= 8 ? "negative" : cancellationRate >= 4 ? "neutral" : "positive",
+      text: cancellationZones.length
+        ? t("cx.execCancel", {
+            rate: cancellationRate.toFixed(1),
+            zone: cancellationZones[0].zone,
+            zoneRate: cancellationZones[0].rate.toFixed(1),
+          })
+        : t("cx.execCancelNoZone", { rate: cancellationRate.toFixed(1) }),
+    })
+
+    // The single thing to act on, chosen by the loudest negative signal.
+    const action = cancellationRate >= 8 && cancellationZones.length
+      ? t("cx.execActionCancel", { zone: cancellationZones[0].zone })
+      : escalationPct !== null && escalationPct >= 40
+        ? t("cx.execActionEscalation", { pct: escalationPct.toFixed(0) })
+        : topComplaints.length
+          ? t("cx.execActionComplaint", { name: tv(topComplaints[0].name) })
+          : t("cx.execActionNone")
+
+    return { verdict, points, action }
+  }, [
+    health, totalInteractions, sentimentScore, scopedCalls.length, msgTotal, contactRate,
+    topComplaints, handledBy, triggers, cancellationRate, cancellationZones, escalationPct, t, tv,
+  ])
+
+
   // Hover breakdown behind the cancellation-rate stat: top zones by cancelled
   // volume (falls back to cancelling actors if zone data is empty).
   const cancelContributors = useMemo(() => {
@@ -415,15 +630,22 @@ export default function CxDashboardPage() {
           <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-wrap items-center gap-3">
               <select
+                aria-label={t("cx.zoneFilter")}
                 className="rounded-lg border border-border bg-background px-3 py-1.5 text-sm font-medium text-foreground outline-none focus:ring-2 focus:ring-primary/50"
-                value={zoneFilter} onChange={(e) => setZoneFilter(e.target.value)}
+                value={zone} onChange={(e) => setZone(e.target.value)}
               >
-                {["All Zones", "Al Rayyan", "West Bay", "Al Wakra", "Lusail", "Al Khor", "Al Daayen"].map((z) => (
+                <option value="all">{tv("All Zones")}</option>
+                {zoneOptions.map((z) => (
                   <option key={z} value={z}>{tv(z)}</option>
                 ))}
               </select>
               {/* Mobile-only: topbar shows the vertical filter on lg+ (avoids a duplicate). */}
               <GlobalVerticalSelect className="lg:hidden" />
+              {zone !== "all" && (
+                <span className="rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
+                  {t("cx.scopedToZone", { zone: tv(zone) })}
+                </span>
+              )}
             </div>
             <button
               onClick={resetFilters}
@@ -432,6 +654,53 @@ export default function CxDashboardPage() {
               {t("cx.resetFilters")}
             </button>
           </div>
+
+          {/* EXECUTIVE SUMMARY — the whole product in one read, assembled from the
+              Calls, Messages and Cancellations panels below. */}
+          <section className="flex flex-col gap-5 rounded-xl border border-primary/25 bg-gradient-to-br from-primary/[0.07] to-transparent p-6 shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-bold tracking-tight text-foreground">{t("cx.execTitle")}</h2>
+                <p className="text-xs text-muted-foreground">{t("cx.execSubtitle")}</p>
+              </div>
+              <span className={cn(
+                "rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wide",
+                health.tone === "positive" ? "border-positive/30 bg-positive/10 text-positive" :
+                health.tone === "neutral" ? "border-neutral/30 bg-neutral/10 text-neutral" :
+                "border-destructive/30 bg-destructive/10 text-destructive",
+              )}>
+                {t("cx.healthIs", { label: health.label })}
+              </span>
+            </div>
+
+            <p className="max-w-4xl text-base leading-relaxed text-foreground">{execSummary.verdict}</p>
+
+            <ul className="grid grid-cols-1 gap-x-6 gap-y-3 lg:grid-cols-2">
+              {execSummary.points.map((pt) => (
+                <li key={pt.key} className="flex items-start gap-2.5 text-sm leading-relaxed text-muted-foreground">
+                  {/* Tone is carried by the icon, not colour alone. */}
+                  {pt.tone === "negative" ? (
+                    <TrendingDown className="mt-0.5 size-4 shrink-0 text-destructive" aria-label={t("cx.toneNegative")} />
+                  ) : pt.tone === "positive" ? (
+                    <TrendingUp className="mt-0.5 size-4 shrink-0 text-positive" aria-label={t("cx.tonePositive")} />
+                  ) : (
+                    <Activity className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-label={t("cx.toneNeutral")} />
+                  )}
+                  <span>{pt.text}</span>
+                </li>
+              ))}
+            </ul>
+
+            <div className="flex items-start gap-3 rounded-lg border border-accent/25 bg-accent/5 p-4">
+              <div className="mt-0.5 rounded-full bg-accent/20 p-1.5 text-accent">
+                <Lightbulb className="size-4" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-foreground">{t("cx.execActTitle")}</h3>
+                <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{execSummary.action}</p>
+              </div>
+            </div>
+          </section>
 
           {/* Summary KPI Strip */}
           <div className="grid grid-cols-2 gap-4 xl:grid-cols-5">
@@ -483,6 +752,7 @@ export default function CxDashboardPage() {
                     </ResponsiveContainer>
                     )}
                   </div>
+                  <ChartInsight text={callVolumeInsight} />
                   <div className="h-[120px] w-full">
                     {weeklyCallSentiment.length === 0 ? <EmptyChart label={t("empty.noCallData")} /> : (
                     <ResponsiveContainer width="100%" height="100%">
@@ -498,6 +768,7 @@ export default function CxDashboardPage() {
                     </ResponsiveContainer>
                     )}
                   </div>
+                  <ChartInsight text={callSentimentInsight} />
                 </div>
 
                 <div className="flex flex-col gap-3">
@@ -516,6 +787,7 @@ export default function CxDashboardPage() {
                       {comp.trend === "up" ? <TrendingUp className="size-4 text-destructive" /> : <TrendingDown className="size-4 text-positive" />}
                     </div>
                   ))}
+                  <ChartInsight text={complaintsInsight} />
                 </div>
               </div>
             </div>
@@ -544,6 +816,7 @@ export default function CxDashboardPage() {
                     </ResponsiveContainer>
                     )}
                   </div>
+                  <ChartInsight text={sentimentScoreInsight} />
                   <div className="h-[160px] w-full">
                     {topNegativeTopics.length === 0 ? <EmptyChart label={t("empty.noNegativeTopics")} /> : (
                     <ResponsiveContainer width="100%" height="100%">
@@ -557,6 +830,7 @@ export default function CxDashboardPage() {
                     </ResponsiveContainer>
                     )}
                   </div>
+                  <ChartInsight text={negativeTopicsInsight} />
                 </div>
 
                 <div className="flex flex-col gap-4">
@@ -612,6 +886,7 @@ export default function CxDashboardPage() {
                     </ResponsiveContainer>
                     )}
                   </div>
+                  <ChartInsight text={cancelTrendInsight} />
                   <div className="flex flex-col gap-2">
                     <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
                       {cancelDrivers.byActor ? t("cx.cancelledBy") : t("cx.topDrivers")}
@@ -624,6 +899,7 @@ export default function CxDashboardPage() {
                         <span className="text-xs font-semibold text-muted-foreground">{driver.percentage}%</span>
                       </div>
                     ))}
+                    <ChartInsight text={driversInsight} />
                   </div>
                 </div>
 
@@ -638,7 +914,12 @@ export default function CxDashboardPage() {
                         <RechartsTooltip cursor={{ fill: 'var(--muted)', opacity: 0.5 }} content={<CustomTooltip />} />
                         <Bar dataKey="rate" radius={[0, 4, 4, 0]} barSize={12}>
                           {cancellationZones.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.level === 'high' ? 'var(--destructive)' : entry.level === 'medium' ? 'var(--neutral)' : 'var(--primary)'} />
+                            <Cell
+                              key={`cell-${index}`}
+                              fill={entry.level === 'high' ? 'var(--destructive)' : entry.level === 'medium' ? 'var(--neutral)' : 'var(--primary)'}
+                              // The rest dim so the scoped zone stands out among its peers.
+                              fillOpacity={zone === "all" || entry.zone === zone ? 1 : 0.25}
+                            />
                           ))}
                         </Bar>
                       </BarChart>
@@ -653,6 +934,12 @@ export default function CxDashboardPage() {
               </div>
             </div>
 
+          </div>
+
+          {/* CHANNEL BEHAVIOUR — where each intent lands, and who handles it. */}
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+            <CrossChannelComparison data={crossChannel} />
+            <HandledByPanel data={handledBy} />
           </div>
 
           {/* WEEKLY CX HEALTH SCORE */}
@@ -704,6 +991,7 @@ export default function CxDashboardPage() {
                     </ResponsiveContainer>
                     )}
                   </div>
+                  <ChartInsight text={healthInsight} />
                 </div>
 
                 <div>
@@ -747,6 +1035,20 @@ export default function CxDashboardPage() {
         </main>
       </div>
     </div>
+  )
+}
+
+/**
+ * One-line read for the chart directly above it. Renders nothing when the
+ * series is too thin to say anything true — an absent insight beats a hedged one.
+ */
+function ChartInsight({ text }: { text: string | null }) {
+  if (!text) return null
+  return (
+    <p className="flex items-start gap-1.5 text-xs leading-relaxed text-muted-foreground">
+      <Lightbulb className="mt-0.5 size-3 shrink-0 text-accent" aria-hidden />
+      <span>{text}</span>
+    </p>
   )
 }
 

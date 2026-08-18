@@ -10,7 +10,7 @@ import { StatCard } from "@/components/clarity/stat-card"
 import { MessageFeedTable } from "@/components/clarity/message-feed-table"
 import { MessageDetailModal } from "@/components/clarity/message-detail-modal"
 import { TopNegativeTriggers } from "@/components/clarity/top-negative-triggers"
-import { CrossChannelComparison } from "@/components/clarity/cross-channel-comparison"
+import { HandledByPanel } from "@/components/clarity/handled-by"
 import { SentimentByZoneTime } from "@/components/clarity/sentiment-by-zone-time"
 import { MessageSentimentTrend } from "@/components/clarity/message-sentiment-trend"
 import { MessagesLoading } from "@/components/clarity/loading-screen"
@@ -29,7 +29,7 @@ import {
   fetchAllMessagesData,
   clearServerCache,
   type TriggerItem,
-  type CrossChannelItem,
+  type HandledBy,
   type TrendItem,
   type ZoneItem,
   type TimeItem,
@@ -49,7 +49,7 @@ function MessagesPageInner() {
   // feed above is capped at 1000 rows, so anything derived from it is only a sample.
   const [overview, setOverview] = useState<MessageOverview | null>(null)
   const [triggers, setTriggers] = useState<TriggerItem[] | undefined>(undefined)
-  const [crossChannel, setCrossChannel] = useState<CrossChannelItem[] | undefined>(undefined)
+  const [handledBy, setHandledBy] = useState<HandledBy | null>(null)
   const [trend, setTrend] = useState<TrendItem[] | undefined>(undefined)
   const [zones, setZones] = useState<ZoneItem[] | undefined>(undefined)
   const [loading, setLoading] = useState(true)
@@ -75,7 +75,7 @@ function MessagesPageInner() {
         setMessages(result.messages ?? [])
         if (result.overview) setOverview(result.overview)
         if (result.triggers) setTriggers(result.triggers)
-        if (result.crossChannel) setCrossChannel(result.crossChannel)
+        if (result.handledBy) setHandledBy(result.handledBy)
         if (result.trend) setTrend(result.trend)
         if (result.zones) setZones(result.zones)
         setLastUpdated(new Date())
@@ -372,8 +372,8 @@ function MessagesPageInner() {
 
           <MessageFeedTable messages={filteredMessages} />
 
-          <div className="grid grid-cols-1 gap-6 xl:grid-cols-[2fr_3fr]">
-            <CrossChannelComparison data={crossChannel} />
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-[3fr_2fr]">
+            <HandledByPanel data={handledBy} />
             <MessageSentimentTrend data={trend} />
           </div>
 

@@ -164,6 +164,10 @@ CREATE TABLE call_analysis (
     sentiment            text,
     sentiment_confidence real,
     summary              text,
+    -- Why the customer called, as a short phrase. Added after the first
+    -- schema shipped; rows analysed before it exists fall back to a
+    -- reason derived from the summary (call_analytics_service).
+    call_reason          text,
     analysed_at          timestamptz,
     sim_emitted_at       timestamptz
 );

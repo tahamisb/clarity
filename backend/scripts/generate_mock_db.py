@@ -279,6 +279,7 @@ CALL_SCENARIOS = [
         ],
         "agent": ["That's wonderful to hear, I appreciate you calling in to tell us."],
         "summary": "Customer called to praise a fast delivery and a courteous driver.",
+        "reason": "Unprompted praise for delivery speed and driver",
     },
     {
         "intent": "payment_issue", "sentiment": "negative", "confidence": 0.81,
@@ -340,6 +341,7 @@ CALL_SCENARIOS = [
         "customer": ["شكرا لكم، الطلب وصل بسرعة والخدمة رائعة."],
         "agent": ["يسعدنا سماع ذلك، شكرا لتواصلك معنا."],
         "summary": "Customer called to thank the team for a fast delivery.",
+        "reason": "Unprompted thanks for a fast delivery",
         "arabic": True,
     },
 ]
@@ -351,7 +353,36 @@ AREAS = ZONES[:12]
 # outnumbering the rest three to one.
 _SENTIMENT_WEIGHT = {"negative": 3, "neutral": 6, "positive": 6}
 _MSG_WEIGHTS = [_SENTIMENT_WEIGHT[t[0]] for t in MESSAGE_TEMPLATES]
-_CALL_WEIGHTS = [{"negative": 2, "neutral": 3, "positive": 4}[s["sentiment"]] for s in CALL_SCENARIOS]
+
+# Inbound CALL mix is weighted by intent, not by sentiment: people phone a
+# food-delivery support line because something went wrong or they want a status.
+# Almost nobody calls to say thank you — praise arrives via ratings and reviews,
+# not the phone queue. Shares are percentages of all calls.
+_CALL_INTENT_MIX = {
+    "delivery_issue":  24,
+    "order_status":    18,
+    "wrong_item":      13,
+    "refund_request":  12,
+    "payment_issue":    9,
+    "cancellation":     8,
+    "complaint":        7,
+    "account_issue":    5,
+    "escalation":       3,
+    "general_inquiry":  1,
+    # Rare but real — kept non-zero so the positive-sentiment path still has data.
+    "praise":           1,
+}
+
+
+def _call_weights() -> list[float]:
+    """Split each intent's share evenly across the templates that carry it."""
+    per_intent: dict[str, int] = {}
+    for sc in CALL_SCENARIOS:
+        per_intent[sc["intent"]] = per_intent.get(sc["intent"], 0) + 1
+    return [_CALL_INTENT_MIX[sc["intent"]] / per_intent[sc["intent"]] for sc in CALL_SCENARIOS]
+
+
+_CALL_WEIGHTS = _call_weights()
 
 
 # ---------------------------------------------------------------------------
@@ -425,7 +456,8 @@ DROP TABLE IF EXISTS call_analysis;
 CREATE TABLE call_analysis (
     call_id TEXT PRIMARY KEY, transcript TEXT, intents TEXT, primary_intent TEXT,
     sentiment TEXT, sentiment_confidence REAL, order_ids TEXT, restaurant_names TEXT,
-    areas TEXT, product_names TEXT, qar_amounts TEXT, summary TEXT, analysed_at TEXT
+    areas TEXT, product_names TEXT, qar_amounts TEXT, summary TEXT, call_reason TEXT,
+    analysed_at TEXT
 );
 
 DROP TABLE IF EXISTS messages;
@@ -637,6 +669,34 @@ def gen_messages(count: int) -> tuple[list[tuple], list[tuple], list[tuple]]:
     return messages, classifications, labels
 
 
+# The order gen_calls() emits. Named explicitly in the INSERT because the column
+# can be appended by migration rather than sitting where the schema literal puts it.
+CALL_COLUMNS = [
+    "call_id", "transcript", "intents", "primary_intent", "sentiment",
+    "sentiment_confidence", "order_ids", "restaurant_names", "areas",
+    "product_names", "qar_amounts", "summary", "call_reason", "analysed_at",
+]
+
+# Not every unhappy-path call is an angry one — plenty of people ring up about a
+# late order perfectly calmly, and a routine status check can turn sour. Without
+# this the corpus is a deterministic intent→sentiment lookup (~68% negative).
+_SENTIMENT_DRIFT = {
+    "negative": [("negative", 0.72), ("neutral", 0.28)],
+    "neutral":  [("neutral", 0.78), ("negative", 0.19), ("positive", 0.03)],
+    "positive": [("positive", 0.94), ("neutral", 0.06)],
+}
+
+
+def drift_sentiment(base: str) -> str:
+    options = _SENTIMENT_DRIFT[base]
+    return RNG.choices([o[0] for o in options], weights=[o[1] for o in options])[0]
+
+
+# Same derivation the API applies to live analyses, so seeded rows and analysed
+# rows are indistinguishable downstream.
+from app.services.call_service import derive_reason  # noqa: E402
+
+
 def gen_calls(orders: list[tuple], count: int) -> list[tuple]:
     recent = [o for o in orders if o[4] >= "2026-01-01"]
     rows = []
@@ -660,17 +720,22 @@ def gen_calls(orders: list[tuple], count: int) -> list[tuple]:
 
         order = RNG.choice(recent)
         d = date.fromisoformat(order[4])
+        sentiment = drift_sentiment(sc["sentiment"])
         rows.append((
             str(uuid.uuid4()), "\n".join(lines),
             json.dumps([sc["intent"]] + ([RNG.choice(["complaint", "escalation"])]
                                          if RNG.random() < 0.25 else [])),
-            sc["intent"], sc["sentiment"], sc["confidence"],
+            sc["intent"], sentiment,
+            # A drifted label is a less clear-cut read than the template's own.
+            round(sc["confidence"] if sentiment == sc["sentiment"]
+                  else max(0.55, sc["confidence"] - RNG.uniform(0.08, 0.18)), 2),
             json.dumps([str(order[0])] if RNG.random() < 0.75 else []),
             json.dumps([order[24]]),
             json.dumps(RNG.sample(AREAS, RNG.randint(1, 2))),
             json.dumps([RNG.choice(PRODUCTS)[0] for _ in range(RNG.randint(0, 2))]),
             json.dumps([str(round(RNG.uniform(15, 250), 2))] if RNG.random() < 0.4 else []),
-            sc["summary"], ts(d, pick_hour()),
+            sc["summary"], sc.get("reason") or derive_reason("", sc["summary"], sc["intent"]),
+            ts(d, pick_hour()),
         ))
     return rows
 
@@ -746,7 +811,8 @@ def build(order_count: int) -> None:
 
     print(f"Generating {CALL_COUNT:,} analysed calls…")
     conn.executemany(
-        f"INSERT INTO call_analysis VALUES ({','.join('?' * 13)})", gen_calls(orders, CALL_COUNT)
+        f"INSERT INTO call_analysis ({', '.join(CALL_COLUMNS)}) "
+        f"VALUES ({','.join('?' * len(CALL_COLUMNS))})", gen_calls(orders, CALL_COUNT)
     )
 
     preds = gen_predictions(orders)

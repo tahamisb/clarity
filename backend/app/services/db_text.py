@@ -39,6 +39,16 @@ def _vertical_param(vertical: Optional[str]) -> dict:
     return {"vertical": vertical} if vertical else {}
 
 
+# Messages carry a plain zone name; analysed calls carry a JSON array of areas
+# using the same vocabulary, so one selection scopes both.
+_MSG_ZONE = "m.zone = :zone"
+_CALL_ZONE = "EXISTS (SELECT 1 FROM json_each(ca.areas) WHERE json_each.value = :zone)"
+
+
+def _zone_param(zone: Optional[str]) -> dict:
+    return {"zone": zone} if zone else {}
+
+
 # ---------------------------------------------------------------------------
 # Writes
 # ---------------------------------------------------------------------------
@@ -245,10 +255,13 @@ def _date_clauses(col: str, start: Optional[str], end: Optional[str]) -> list[st
 
 def _sentiment_trend_sync(
     start: Optional[str] = None, end: Optional[str] = None, vertical: Optional[str] = None,
+    zone: Optional[str] = None,
 ) -> list[dict]:
     conditions = ["m.created_at IS NOT NULL", *_date_clauses("m.created_at", start, end)]
     if vertical:
         conditions.append(f"{_VERTICAL} = :vertical")
+    if zone:
+        conditions.append(_MSG_ZONE)
     return db.query(f"""
         {_MV_WITH if vertical else ""}
         SELECT week_start(m.created_at) AS week_start, c.sentiment, COUNT(*) AS cnt
@@ -257,13 +270,14 @@ def _sentiment_trend_sync(
         {_MV_JOIN if vertical else ""}
         WHERE {" AND ".join(conditions)}
         GROUP BY 1, 2 ORDER BY 1
-    """, {**_date_params(start, end), **_vertical_param(vertical)})
+    """, {**_date_params(start, end), **_vertical_param(vertical), **_zone_param(zone)})
 
 
 async def query_sentiment_trend(
     start: Optional[str] = None, end: Optional[str] = None, vertical: Optional[str] = None,
+    zone: Optional[str] = None,
 ) -> list[dict]:
-    return await _offload(_sentiment_trend_sync, start, end, vertical)
+    return await _offload(_sentiment_trend_sync, start, end, vertical, zone)
 
 
 # Gemini's negative_trigger is free-form ("delayed delivery", "order delay",
@@ -349,19 +363,23 @@ async def query_top_triggers(
 
 def _text_conditions(
     start: Optional[str], end: Optional[str], vertical: Optional[str],
+    zone: Optional[str] = None,
 ) -> tuple[str, dict]:
     """(WHERE sql, params) for messages-joined queries."""
     conditions = _date_clauses("m.created_at", start, end)
     if vertical:
         conditions.append(f"{_VERTICAL} = :vertical")
+    if zone:
+        conditions.append(_MSG_ZONE)
     where_sql = ("WHERE " + " AND ".join(conditions)) if conditions else ""
-    return where_sql, {**_date_params(start, end), **_vertical_param(vertical)}
+    return where_sql, {**_date_params(start, end), **_vertical_param(vertical), **_zone_param(zone)}
 
 
 def _text_sentiment_summary_sync(
     start: Optional[str] = None, end: Optional[str] = None, vertical: Optional[str] = None,
+    zone: Optional[str] = None,
 ) -> dict:
-    where_sql, params = _text_conditions(start, end, vertical)
+    where_sql, params = _text_conditions(start, end, vertical, zone=zone)
     rows = {r["sentiment"]: int(r["cnt"]) for r in db.query(f"""
         {_MV_WITH if vertical else ""}
         SELECT c.sentiment AS sentiment, COUNT(*) AS cnt
@@ -375,8 +393,9 @@ def _text_sentiment_summary_sync(
 
 def _text_intent_counts_sync(
     start: Optional[str] = None, end: Optional[str] = None, vertical: Optional[str] = None,
+    zone: Optional[str] = None,
 ) -> dict:
-    where_sql, params = _text_conditions(start, end, vertical)
+    where_sql, params = _text_conditions(start, end, vertical, zone=zone)
     return {r["intent"]: int(r["cnt"]) for r in db.query(f"""
         {_MV_WITH if vertical else ""}
         SELECT c.intent AS intent, COUNT(*) AS cnt
@@ -394,18 +413,22 @@ _CALL_MV_JOIN = "LEFT JOIN mv ON json_extract(ca.restaurant_names, '$[0]') = mv.
 
 def _call_conditions(
     start: Optional[str], end: Optional[str], vertical: Optional[str], extra: tuple[str, ...] = (),
+    zone: Optional[str] = None,
 ) -> tuple[str, dict]:
     conditions = [*extra, *_date_clauses("ca.analysed_at", start, end)]
     if vertical:
         conditions.append(f"{_VERTICAL} = :vertical")
+    if zone:
+        conditions.append(_CALL_ZONE)
     where_sql = ("WHERE " + " AND ".join(conditions)) if conditions else ""
-    return where_sql, {**_date_params(start, end), **_vertical_param(vertical)}
+    return where_sql, {**_date_params(start, end), **_vertical_param(vertical), **_zone_param(zone)}
 
 
 def _call_sentiment_summary_sync(
     start: Optional[str] = None, end: Optional[str] = None, vertical: Optional[str] = None,
+    zone: Optional[str] = None,
 ) -> dict:
-    where_sql, params = _call_conditions(start, end, vertical)
+    where_sql, params = _call_conditions(start, end, vertical, zone=zone)
     rows = {r["sentiment"]: int(r["cnt"]) for r in db.query(f"""
         {_MV_WITH if vertical else ""}
         SELECT ca.sentiment AS sentiment, COUNT(*) AS cnt
@@ -418,8 +441,10 @@ def _call_sentiment_summary_sync(
 
 def _call_intent_counts_sync(
     start: Optional[str] = None, end: Optional[str] = None, vertical: Optional[str] = None,
+    zone: Optional[str] = None,
 ) -> dict:
-    where_sql, params = _call_conditions(start, end, vertical, extra=("ca.primary_intent IS NOT NULL",))
+    where_sql, params = _call_conditions(
+        start, end, vertical, extra=("ca.primary_intent IS NOT NULL",), zone=zone)
     return {r["intent"]: int(r["cnt"]) for r in db.query(f"""
         {_MV_WITH if vertical else ""}
         SELECT ca.primary_intent AS intent, COUNT(*) AS cnt
@@ -431,13 +456,14 @@ def _call_intent_counts_sync(
 
 async def query_cross_channel_data(
     start: Optional[str] = None, end: Optional[str] = None, vertical: Optional[str] = None,
+    zone: Optional[str] = None,
 ) -> dict:
     loop = asyncio.get_running_loop()
     results = await asyncio.gather(
-        loop.run_in_executor(None, _text_sentiment_summary_sync, start, end, vertical),
-        loop.run_in_executor(None, _text_intent_counts_sync, start, end, vertical),
-        loop.run_in_executor(None, _call_sentiment_summary_sync, start, end, vertical),
-        loop.run_in_executor(None, _call_intent_counts_sync, start, end, vertical),
+        loop.run_in_executor(None, _text_sentiment_summary_sync, start, end, vertical, zone),
+        loop.run_in_executor(None, _text_intent_counts_sync, start, end, vertical, zone),
+        loop.run_in_executor(None, _call_sentiment_summary_sync, start, end, vertical, zone),
+        loop.run_in_executor(None, _call_intent_counts_sync, start, end, vertical, zone),
     )
     return {
         "text_sentiment": results[0], "text_intents": results[1],
@@ -609,14 +635,16 @@ def _tod_counts(name: str, bucket_cond: str) -> str:
 def _message_overview_sync(
     start: Optional[str], end: Optional[str],
     chat_sla_hours: float, general_sla_hours: float,
-    vertical: Optional[str] = None,
+    vertical: Optional[str] = None, zone: Optional[str] = None,
 ) -> dict:
     where = _date_clauses("m.created_at", start, end)
     if vertical:
         where.append(f"{_VERTICAL} = :vertical")
+    if zone:
+        where.append(_MSG_ZONE)
     where_sql = ("WHERE " + " AND ".join(where)) if where else ""
     params = {
-        **_date_params(start, end), **_vertical_param(vertical),
+        **_date_params(start, end), **_vertical_param(vertical), **_zone_param(zone),
         "chat_sla": chat_sla_hours, "general_sla": general_sla_hours,
     }
     hour = hour_of("m.created_at")
@@ -654,10 +682,10 @@ def _message_overview_sync(
 async def query_message_overview(
     start: Optional[str] = None, end: Optional[str] = None,
     chat_sla_hours: float = 4.0, general_sla_hours: float = 24.0,
-    vertical: Optional[str] = None,
+    vertical: Optional[str] = None, zone: Optional[str] = None,
 ) -> dict:
     return await _offload(
-        _message_overview_sync, start, end, chat_sla_hours, general_sla_hours, vertical
+        _message_overview_sync, start, end, chat_sla_hours, general_sla_hours, vertical, zone
     )
 
 
@@ -671,3 +699,56 @@ async def query_accuracy_rows() -> list[dict]:
 
 async def ping() -> bool:
     return await _offload(db.ping)
+
+
+# ---------------------------------------------------------------------------
+# Handled by: bot vs human agent
+# ---------------------------------------------------------------------------
+# A conversation with no agent_name was closed by the bot; one with an agent_name
+# was escalated to (and handled by) a human. Sentiment is split per handler so
+# leadership can compare outcome quality between the two.
+def _handled_by_sync(
+    start: Optional[str], end: Optional[str], vertical: Optional[str] = None,
+    zone: Optional[str] = None,
+) -> list[dict]:
+    where = _date_clauses("m.created_at", start, end)
+    if vertical:
+        where.append(f"{_VERTICAL} = :vertical")
+    if zone:
+        where.append(_MSG_ZONE)
+    where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+    rows = db.query(f"""
+        {_MV_WITH}
+        SELECT
+          CASE WHEN m.agent_name IS NULL OR TRIM(m.agent_name) = ''
+               THEN 'Bot' ELSE 'Agent' END AS handler,
+          COUNT(*) AS handled,
+          {countif("c.sentiment = 'positive'")} AS positive,
+          {countif("c.sentiment = 'neutral'")}  AS neutral,
+          {countif("c.sentiment = 'negative'")} AS negative,
+          {countif("m.closed_at IS NOT NULL")}  AS resolved
+        FROM classifications c
+        JOIN messages m ON c.message_id = m.message_id
+        {_MV_JOIN}
+        {where_sql}
+        GROUP BY handler
+    """, {**_date_params(start, end), **_vertical_param(vertical), **_zone_param(zone)})
+    out = {r["handler"]: r for r in rows}
+    return [
+        {
+            "handler": h,
+            "handled": int((out.get(h) or {}).get("handled", 0)),
+            "positive": int((out.get(h) or {}).get("positive", 0)),
+            "neutral": int((out.get(h) or {}).get("neutral", 0)),
+            "negative": int((out.get(h) or {}).get("negative", 0)),
+            "resolved": int((out.get(h) or {}).get("resolved", 0)),
+        }
+        for h in ("Bot", "Agent")
+    ]
+
+
+async def query_handled_by(
+    start: Optional[str] = None, end: Optional[str] = None, vertical: Optional[str] = None,
+    zone: Optional[str] = None,
+) -> list[dict]:
+    return await _offload(_handled_by_sync, start, end, vertical, zone)

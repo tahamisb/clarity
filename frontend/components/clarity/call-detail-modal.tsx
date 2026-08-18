@@ -80,6 +80,13 @@ export function CallDetailModal({
             </div>
           ) : (
             <div className="space-y-4 text-sm">
+              {/* Lead with the concrete reason — the first thing an agent or
+                  reviewer needs, ahead of the derived buckets below it. */}
+              <Field label={t("cdm.callReason")}>
+                <p className="text-base font-semibold leading-snug text-foreground">
+                  {tv(call.reason || call.intent)}
+                </p>
+              </Field>
               <Field label={t("cdm.detectedCategory")}>
                 <span className="font-semibold text-foreground">
                   {tv(call.category)}

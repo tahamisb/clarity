@@ -566,6 +566,8 @@ def gen_calls(
             "product_names": [rng.choice(C.PRODUCTS)[0] for _ in range(rng.randint(0, 2))],
             "qar_amounts": [str(round(rng.uniform(15, 250), 2))] if rng.random() < 0.4 else [],
             "summary": sc["summary"],
+            "call_reason": C.derive_reason(
+                sc.get("reason", ""), sc["summary"], sc["intent"]),
             "analysed_at": qatar_instant(d, local_time_on(rng, d, window)) if window
                            else qatar_instant(d, _rand_time(rng, pick_hour(rng))),
             "sim_emitted_at": None,

@@ -490,6 +490,8 @@ def emit_support(
                 "product_names": [],
                 "qar_amounts": [],
                 "summary": sc["summary"],
+            "call_reason": C.derive_reason(
+                sc.get("reason", ""), sc["summary"], sc["intent"]),
                 "analysed_at": contact_at,
                 "sim_emitted_at": at,
             })
