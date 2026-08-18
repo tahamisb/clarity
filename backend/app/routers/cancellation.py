@@ -22,6 +22,7 @@ from app.models.cancellation import (
     PredictRequest,
 )
 from app.services import cancellation_service as svc
+from app.services import zones
 from app.services import predictor_service as predictor
 from app.services import verticals
 from app.services.predictor_service import ModelUnavailable
@@ -94,57 +95,91 @@ def _vertical(vertical: Optional[str]) -> Optional[str]:
     return vertical
 
 
+def _zone(zone: Optional[str]) -> Optional[str]:
+    """Whitelist-validate the zone filter (safe to interpolate downstream).
+
+    An empty string or "all" means no zone predicate, not a zone named "".
+    """
+    if zone is None or zone == "" or zone == "all":
+        return None
+    if not zones.is_valid(zone):
+        raise HTTPException(status_code=422, detail=f"unknown zone: {zone}")
+    return zone
+
+
+@router.get("/analytics/zones")
+async def analytics_zones():
+    """Zone vocabulary for the filter dropdowns — shared by every dashboard."""
+    return {"zones": list(zones.all_zones())}
+
+
 @router.get("/analytics/trend")
 async def analytics_trend(start: Optional[str] = Query(None), end: Optional[str] = Query(None),
-                          vertical: Optional[str] = Query(None)):
-    return await svc.get_trend(*_window(start, end), _vertical(vertical))
+                          vertical: Optional[str] = Query(None),
+                            zone: Optional[str] = Query(None)):
+    return await svc.get_trend(*_window(start, end), _vertical(vertical), _zone(zone))
 
 
 @router.get("/analytics/by-merchant")
 async def analytics_by_merchant(start: Optional[str] = Query(None), end: Optional[str] = Query(None),
-                                vertical: Optional[str] = Query(None)):
-    return await svc.get_by_merchant(*_window(start, end), _vertical(vertical))
+                                vertical: Optional[str] = Query(None),
+                            zone: Optional[str] = Query(None)):
+    return await svc.get_by_merchant(*_window(start, end), _vertical(vertical), _zone(zone))
 
 
 @router.get("/analytics/by-zone")
 async def analytics_by_zone(start: Optional[str] = Query(None), end: Optional[str] = Query(None),
-                            vertical: Optional[str] = Query(None)):
-    return await svc.get_by_zone(*_window(start, end), _vertical(vertical))
+                            vertical: Optional[str] = Query(None),
+                            zone: Optional[str] = Query(None)):
+    return await svc.get_by_zone(*_window(start, end), _vertical(vertical), _zone(zone))
 
 
 @router.get("/analytics/by-time")
 async def analytics_by_time(start: Optional[str] = Query(None), end: Optional[str] = Query(None),
-                            vertical: Optional[str] = Query(None)):
-    return await svc.get_by_time(*_window(start, end), _vertical(vertical))
+                            vertical: Optional[str] = Query(None),
+                            zone: Optional[str] = Query(None)):
+    return await svc.get_by_time(*_window(start, end), _vertical(vertical), _zone(zone))
+
+
+@router.get("/analytics/by-hour")
+async def analytics_by_hour(start: Optional[str] = Query(None), end: Optional[str] = Query(None),
+                            vertical: Optional[str] = Query(None),
+                            zone: Optional[str] = Query(None)):
+    return {"by_hour": await svc.get_by_hour(*_window(start, end), _vertical(vertical), _zone(zone))}
 
 
 @router.get("/analytics/by-day")
 async def analytics_by_day(start: Optional[str] = Query(None), end: Optional[str] = Query(None),
-                           vertical: Optional[str] = Query(None)):
-    return await svc.get_by_dow(*_window(start, end), _vertical(vertical))
+                           vertical: Optional[str] = Query(None),
+                            zone: Optional[str] = Query(None)):
+    return await svc.get_by_dow(*_window(start, end), _vertical(vertical), _zone(zone))
 
 
 @router.get("/analytics/by-order-size")
 async def analytics_by_order_size(start: Optional[str] = Query(None), end: Optional[str] = Query(None),
-                                  vertical: Optional[str] = Query(None)):
-    return await svc.get_by_order_size(*_window(start, end), _vertical(vertical))
+                                  vertical: Optional[str] = Query(None),
+                            zone: Optional[str] = Query(None)):
+    return await svc.get_by_order_size(*_window(start, end), _vertical(vertical), _zone(zone))
 
 
 @router.get("/analytics/by-actor")
 async def analytics_by_actor(start: Optional[str] = Query(None), end: Optional[str] = Query(None),
-                             vertical: Optional[str] = Query(None)):
-    return await svc.get_by_actor(*_window(start, end), _vertical(vertical))
+                             vertical: Optional[str] = Query(None),
+                            zone: Optional[str] = Query(None)):
+    return await svc.get_by_actor(*_window(start, end), _vertical(vertical), _zone(zone))
 
 
 @router.get("/analytics/crosstabs")
 async def analytics_crosstabs(start: Optional[str] = Query(None), end: Optional[str] = Query(None),
-                              vertical: Optional[str] = Query(None)):
-    return await svc.get_crosstabs(*_window(start, end), _vertical(vertical))
+                              vertical: Optional[str] = Query(None),
+                            zone: Optional[str] = Query(None)):
+    return await svc.get_crosstabs(*_window(start, end), _vertical(vertical), _zone(zone))
 
 
 @router.get("/analytics/by-vertical")
-async def analytics_by_vertical(start: Optional[str] = Query(None), end: Optional[str] = Query(None)):
-    return await svc.get_by_vertical(*_window(start, end))
+async def analytics_by_vertical(start: Optional[str] = Query(None), end: Optional[str] = Query(None),
+                                zone: Optional[str] = Query(None)):
+    return await svc.get_by_vertical(*_window(start, end), _zone(zone))
 
 
 @router.get("/analytics/drivers-report")

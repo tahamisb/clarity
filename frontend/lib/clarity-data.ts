@@ -22,6 +22,8 @@ export type CallRecord = {
   category: Category
   sentiment: Sentiment
   intent: string
+  /** Specific reason the customer called — never a generic "General" label. */
+  reason: string
   confidence: number
   transcript: string
   summary: string

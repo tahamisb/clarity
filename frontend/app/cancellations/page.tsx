@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useMemo, useEffect, useCallback, useRef } from "react"
-import { Ban, TrendingDown, TrendingUp, AlertTriangle, Target, Loader2, RefreshCw, ChevronLeft, ChevronRight } from "lucide-react"
+import { Ban, TrendingDown, TrendingUp, AlertTriangle, Target, Loader2, RefreshCw, Sparkles, ChevronLeft, ChevronRight } from "lucide-react"
 import { Sidebar } from "@/components/clarity/sidebar"
 import { Topbar, type SearchResult } from "@/components/clarity/topbar"
 import { useDebouncedValue } from "@/lib/use-debounced-value"
@@ -23,7 +23,7 @@ import {
   fetchDriversReport,
   explainOrder,
   clearServerCache,
-  type CancelTrend, type CancelByMerchant, type CancelByZone, type TimeCancelRow,
+  type CancelTrend, type CancelByMerchant, type CancelByZone, type TimeCancelRow, type HourCancelRow,
   type DowCancelRow, type ActorRow, type CancelCrosstabs, type DriversReport,
   type LiveQueue, type CancelPrediction,
   type VerticalCancelRow,
@@ -55,6 +55,7 @@ export default function CancellationsPage() {
   const [byMerchant, setByMerchant] = useState<CancelByMerchant | null>(null)
   const [byZone, setByZone] = useState<CancelByZone | null>(null)
   const [byTime, setByTime] = useState<TimeCancelRow[] | null>(null)
+  const [byHour, setByHour] = useState<HourCancelRow[] | null>(null)
   const [byDay, setByDay] = useState<DowCancelRow[] | null>(null)
   const [byActor, setByActor] = useState<ActorRow[] | null>(null)
   const [byVertical, setByVertical] = useState<VerticalCancelRow[] | null>(null)
@@ -88,6 +89,7 @@ export default function CancellationsPage() {
       setByMerchant(d.byMerchant)
       setByZone(d.byZone)
       setByTime(d.byTime)
+      setByHour(d.byHour)
       setByDay(d.byDay)
       setByActor(d.byActor)
       setCrosstabs(d.crosstabs)
@@ -264,12 +266,40 @@ export default function CancellationsPage() {
     [byZone],
   )
 
+  // Rate per hour of day. Volume rides along so the tooltip can show how many
+  // orders each hour's rate is computed from — a 20% rate on 5 orders is noise.
+  const hourData = useMemo(
+    () => [...(byHour ?? [])]
+      .sort((a, b) => a.hour - b.hour)
+      .map((h) => ({
+        hour: `${String(h.hour).padStart(2, "0")}:00`,
+        rate: h.cancel_rate_pct,
+        orders: h.total_orders,
+        cancelled: h.cancelled,
+      })),
+    [byHour],
+  )
+
+  // Worst hour by rate, ignoring thin hours whose rate isn't trustworthy.
+  const worstHour = useMemo(() => {
+    const solid = hourData.filter((h) => h.orders >= 30)
+    if (!solid.length) return null
+    return solid.reduce((a, b) => (b.rate > a.rate ? b : a))
+  }, [hourData])
+
   const dayData = useMemo(
     () => [...(byDay ?? [])]
       .sort((a, b) => a.dow_index - b.dow_index)
       .map((d) => ({ day: d.day_of_week.slice(0, 3), fullDay: d.day_of_week, rate: d.cancel_rate_pct })),
     [byDay],
   )
+
+  // Peak weekday by rate. Was hardcoded to Friday, which silently lied whenever
+  // the window's real worst day was anything else.
+  const worstDay = useMemo(() => {
+    if (!dayData.length) return null
+    return dayData.reduce((a, b) => (b.rate > a.rate ? b : a)).day
+  }, [dayData])
 
   // Live queue filtering
   const queueOrders = useMemo(() => {
@@ -436,6 +466,27 @@ export default function CancellationsPage() {
     )
   }
 
+  // Hour hover — the rate plus the volume it was computed from.
+  const HourTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload?.length) return null
+    const p = payload[0].payload
+    return (
+      <div className="w-52 rounded-lg border border-border bg-card/95 p-3 text-sm shadow-xl backdrop-blur-sm">
+        <p className="font-semibold text-foreground">{label}</p>
+        <div className="mt-1 flex items-center justify-between gap-4 text-xs">
+          <span className="text-muted-foreground">{t("cancel.rateLegend")}</span>
+          <span className="font-medium text-foreground">{p.rate}%</span>
+        </div>
+        <div className="flex items-center justify-between gap-4 text-xs">
+          <span className="text-muted-foreground">{t("cancel.hourOrders")}</span>
+          <span className="tabular-nums text-foreground">
+            {p.cancelled.toLocaleString()} / {p.orders.toLocaleString()}
+          </span>
+        </div>
+      </div>
+    )
+  }
+
   const CustomTooltip = ({ active, payload, label, unit = "%" }: any) => {
     if (active && payload?.length) {
       return (
@@ -522,6 +573,38 @@ export default function CancellationsPage() {
             </HoverBreakdown>
           </div>
 
+          {/* AI BRIEFING — the report's narrative half, hoisted to the top. The
+              ranked drivers and risk segments live beside the panels they
+              explain (see below), so nothing is duplicated. */}
+          {(reportLoading || driversReport) && (
+            <section className="rounded-xl border-l-2 border-accent bg-accent/5 py-4 pl-5 pr-5">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-foreground">
+                  <Sparkles className="size-4 text-accent" />
+                  {t("cancel.briefing")}
+                </h2>
+                {driversReport?.generated_at && (
+                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <RefreshCw className="size-3" /> {driversReport.generated_at.slice(0, 10)}
+                  </span>
+                )}
+              </div>
+              {reportLoading ? (
+                <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="size-4 animate-spin text-accent" />
+                  {t("cancel.generatingReport")}
+                </p>
+              ) : (
+                <div className="space-y-2 text-sm leading-relaxed text-foreground">
+                  <p>{driversReport!.executive_summary}</p>
+                  {driversReport!.trend_insight && (
+                    <p className="text-muted-foreground">{driversReport!.trend_insight}</p>
+                  )}
+                </div>
+              )}
+            </section>
+          )}
+
           {/* Cancellation breakdown across verticals (always unfiltered — it IS the vertical view) */}
           {byVertical && byVertical.length > 0 && (
             <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
@@ -547,8 +630,8 @@ export default function CancellationsPage() {
             </div>
           )}
 
-          {/* Trend + Top Drivers */}
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[2fr_1.5fr]">
+          {/* Trend */}
+          <div className="grid grid-cols-1 gap-6">
             <div className="flex min-w-0 flex-col rounded-xl border border-border bg-card p-5 shadow-sm">
               <h2 className="mb-4 text-base font-semibold text-foreground">{t("cancel.rateByWeek")}</h2>
               <div className="h-[300px] w-full">
@@ -569,11 +652,15 @@ export default function CancellationsPage() {
               </div>
             </div>
 
-            <div className="flex min-w-0 flex-col rounded-xl border border-border bg-card p-5 shadow-sm">
-              <h2 className="mb-4 text-base font-semibold text-foreground">
-                {driversReport?.top_drivers?.length ? t("cancel.topDrivers") : t("cancel.byActor")}
-              </h2>
-              <div className="h-[240px] w-full">
+          </div>
+
+          {/* TOP DRIVERS — the ranking and the reasoning for it, together. */}
+          <div className="flex min-w-0 flex-col rounded-xl border border-border bg-card p-5 shadow-sm">
+            <h2 className="mb-4 text-base font-semibold text-foreground">
+              {driversReport?.top_drivers?.length ? t("cancel.topDrivers") : t("cancel.byActor")}
+            </h2>
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_1.2fr]">
+              <div className="h-[280px] w-full">
                 {driverData.length === 0 ? (
                   <EmptyChart label={t("cancel.trainToSeeDrivers")} />
                 ) : (
@@ -592,6 +679,65 @@ export default function CancellationsPage() {
                   </ResponsiveContainer>
                 )}
               </div>
+
+              {/* Why each bar is where it is, plus what to do about it. */}
+              <div className="flex min-w-0 flex-col">
+                {reportLoading ? (
+                  <p className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
+                    <Loader2 className="size-4 animate-spin text-accent" />
+                    {t("cancel.generatingReport")}
+                  </p>
+                ) : !driversReport?.top_drivers?.length ? (
+                  <p className="py-6 text-sm text-muted-foreground">{t("cancel.reportFirstRequest")}</p>
+                ) : (
+                  <ul className="flex max-h-[280px] flex-col gap-3 overflow-y-auto pr-1 text-sm">
+                    {driversReport.top_drivers.slice(0, 6).map((d, i) => (
+                      <li key={i} className="flex gap-3">
+                        <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/20 text-xs font-bold text-primary">
+                          {i + 1}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="font-medium text-foreground">{d.name}</p>
+                          <p className="text-muted-foreground">{d.explanation}</p>
+                          <p className="mt-0.5 text-foreground/80">
+                            <span className="font-semibold text-primary">{t("cancel.actionLabel")}</span>
+                            {d.recommendation}
+                          </p>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Rate by hour of day — the finer read behind the five time buckets. */}
+          <div className="flex min-w-0 flex-col rounded-xl border border-border bg-card p-5 shadow-sm">
+            <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
+              <h2 className="text-base font-semibold text-foreground">{t("cancel.rateByHour")}</h2>
+              {worstHour && (
+                <p className="text-xs text-muted-foreground">
+                  {t("cancel.worstHour", { hour: worstHour.hour, rate: worstHour.rate.toFixed(1) })}
+                </p>
+              )}
+            </div>
+            <div className="h-[240px] w-full">
+              {hourData.length === 0 ? <EmptyChart label={t("cancel.noHour")} /> : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={hourData} margin={{ top: 10, right: 8, left: -20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
+                    <XAxis dataKey="hour" stroke="var(--muted-foreground)" fontSize={11} tickLine={false} axisLine={false} interval={1} />
+                    <YAxis stroke="var(--muted-foreground)" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(v) => `${v}%`} />
+                    <RechartsTooltip cursor={{ fill: "var(--muted)", opacity: 0.5 }} content={<HourTooltip />} />
+                    <Bar dataKey="rate" radius={[4, 4, 0, 0]}>
+                      {hourData.map((h) => (
+                        <Cell key={h.hour} fill={worstHour && h.hour === worstHour.hour ? "var(--destructive)" : "var(--primary)"} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
             </div>
           </div>
 
@@ -654,7 +800,14 @@ export default function CancellationsPage() {
             </div>
 
             <div className="flex min-w-0 flex-col rounded-xl border border-border bg-card p-5 shadow-sm">
-              <h2 className="mb-4 text-base font-semibold text-foreground">{t("cancel.rateByDay")}</h2>
+              <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
+                <h2 className="text-base font-semibold text-foreground">{t("cancel.rateByDay")}</h2>
+                {worstDay && (
+                  <p className="text-xs text-muted-foreground">
+                    {t("cancel.worstDay", { day: tv(worstDay) })}
+                  </p>
+                )}
+              </div>
               <div className="min-h-[250px] w-full flex-1">
                 {dayData.length === 0 ? <EmptyChart label={t("cancel.noDow")} /> : (
                   <ResponsiveContainer width="100%" height="100%">
@@ -665,7 +818,7 @@ export default function CancellationsPage() {
                       <RechartsTooltip cursor={{ fill: "var(--muted)", opacity: 0.5 }} content={<DayTooltip />} />
                       <Bar dataKey="rate" radius={[4, 4, 0, 0]} barSize={24}>
                         {dayData.map((d, i) => (
-                          <Cell key={i} fill={d.day === "Fri" ? "var(--destructive)" : "var(--primary)"} />
+                          <Cell key={i} fill={d.day === worstDay ? "var(--destructive)" : "var(--primary)"} />
                         ))}
                       </Bar>
                     </BarChart>
@@ -674,6 +827,26 @@ export default function CancellationsPage() {
               </div>
             </div>
           </div>
+
+          {/* HIGH-RISK SEGMENTS — who to watch, immediately above the queue. */}
+          {!reportLoading && driversReport?.high_risk_segments?.length ? (
+            <div className="flex flex-col rounded-xl border border-border bg-card p-5 shadow-sm">
+              <h2 className="mb-3 text-base font-semibold text-foreground">{t("cancel.highRiskSegments")}</h2>
+              <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                {driversReport.high_risk_segments.map((seg, i) => (
+                  <li key={i} className="rounded-lg border border-border bg-muted/30 p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="min-w-0 truncate font-medium text-foreground">{seg.segment}</span>
+                      {seg.cancel_rate != null && (
+                        <span className="shrink-0 text-xs font-semibold text-destructive">{seg.cancel_rate}%</span>
+                      )}
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">{seg.recommendation}</p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
 
           {/* Live high-risk queue */}
           <div className="flex flex-col rounded-xl border border-border bg-card shadow-sm">
@@ -814,79 +987,6 @@ export default function CancellationsPage() {
               )}
               </>
             )}
-          </div>
-
-          {/* Drivers report */}
-          <div className="grid grid-cols-1 gap-6">
-            <div className="flex flex-col rounded-xl border border-border bg-card p-6 shadow-sm">
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-xl font-bold text-foreground">{t("cancel.driversReport")}</h2>
-                {driversReport?.generated_at && (
-                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <RefreshCw className="size-3" /> {driversReport.generated_at.slice(0, 10)}
-                  </span>
-                )}
-              </div>
-
-              {reportLoading ? (
-                <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
-                  <Loader2 className="size-4 animate-spin text-accent" />
-                  {t("cancel.generatingReport")}
-                </div>
-              ) : !driversReport ? (
-                <p className="text-sm text-muted-foreground">
-                  {t("cancel.reportFirstRequest")}
-                </p>
-              ) : (
-                <div className="space-y-6 text-sm text-muted-foreground">
-                  <section>
-                    <h3 className="mb-2 text-sm font-semibold uppercase tracking-wider text-foreground">{t("cancel.executiveSummary")}</h3>
-                    <p className="leading-relaxed">{driversReport.executive_summary}</p>
-                  </section>
-
-                  {driversReport.top_drivers?.length > 0 && (
-                    <section>
-                      <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-foreground">{t("cancel.topDrivers")}</h3>
-                      <ul className="space-y-3">
-                        {driversReport.top_drivers.slice(0, 6).map((d, i) => (
-                          <li key={i} className="flex gap-3">
-                            <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/20 text-xs font-bold text-primary">{i + 1}</span>
-                            <div>
-                              <p className="font-medium text-foreground">{d.name}</p>
-                              <p>{d.explanation}</p>
-                              <p className="mt-0.5 text-foreground/80"><span className="font-semibold text-primary">{t("cancel.actionLabel")}</span>{d.recommendation}</p>
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    </section>
-                  )}
-
-                  {driversReport.high_risk_segments?.length > 0 && (
-                    <section>
-                      <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-foreground">{t("cancel.highRiskSegments")}</h3>
-                      <ul className="grid gap-2 sm:grid-cols-2">
-                        {driversReport.high_risk_segments.map((s, i) => (
-                          <li key={i} className="rounded-lg border border-border bg-muted/30 p-3">
-                            <div className="flex items-center justify-between">
-                              <span className="font-medium text-foreground">{s.segment}</span>
-                              {s.cancel_rate != null && <span className="text-xs font-semibold text-destructive">{s.cancel_rate}%</span>}
-                            </div>
-                            <p className="mt-1 text-xs">{s.recommendation}</p>
-                          </li>
-                        ))}
-                      </ul>
-                    </section>
-                  )}
-
-                  {driversReport.trend_insight && (
-                    <div className="rounded-r-lg border-l-2 border-accent bg-accent/5 py-2 pl-4 text-foreground/85">
-                      {driversReport.trend_insight}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
           </div>
 
           </>

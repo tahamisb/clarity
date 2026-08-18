@@ -36,6 +36,7 @@ async def save_call_analysis(result: dict) -> None:
         "product_names": json.dumps(result["entities"]["product_names"]),
         "qar_amounts": json.dumps(result["entities"]["qar_amounts"]),
         "summary": result["summary"],
+        "call_reason": result.get("reason") or None,
         "analysed_at": now_sql(),
     }
     loop = asyncio.get_running_loop()

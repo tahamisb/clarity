@@ -28,8 +28,9 @@ _CALL_TO_TEXT_INTENT = {
 @ttl_cache
 async def get_sentiment_trend(
     start: Optional[str] = None, end: Optional[str] = None, vertical: Optional[str] = None,
+    zone: Optional[str] = None,
 ) -> SentimentTrendResponse:
-    rows = await bq.query_sentiment_trend(start, end, vertical)
+    rows = await bq.query_sentiment_trend(start, end, vertical, zone)
     buckets: dict[str, dict[str, int]] = defaultdict(lambda: {"positive": 0, "neutral": 0, "negative": 0})
     for r in rows:
         s = r["sentiment"]
@@ -82,8 +83,9 @@ async def get_top_negative_triggers(
 @ttl_cache
 async def get_cross_channel(
     start: Optional[str] = None, end: Optional[str] = None, vertical: Optional[str] = None,
+    zone: Optional[str] = None,
 ) -> CrossChannelResponse:
-    data = await bq.query_cross_channel_data(start, end, vertical)
+    data = await bq.query_cross_channel_data(start, end, vertical, zone)
 
     def _summary(d: dict) -> ChannelSentimentSummary:
         total = d.get("total", 0)
@@ -162,12 +164,12 @@ async def get_zone_heatmap(
 async def get_message_overview(
     start: Optional[str] = None, end: Optional[str] = None,
     chat_sla_hours: float = 4.0, general_sla_hours: float = 24.0,
-    vertical: Optional[str] = None,
+    vertical: Optional[str] = None, zone: Optional[str] = None,
 ) -> dict:
     """Full-corpus stats for the Support Messages stat cards, time-of-day chart
     and SLA banner. Returns a plain dict (no response_model — the shape is UI-only
     and not reused elsewhere)."""
-    r = await bq.query_message_overview(start, end, chat_sla_hours, general_sla_hours, vertical)
+    r = await bq.query_message_overview(start, end, chat_sla_hours, general_sla_hours, vertical, zone)
     total = int(r["total"])
 
     def tod(name: str) -> dict:
@@ -189,6 +191,33 @@ async def get_message_overview(
         "time_of_day": [tod(n) for n in ("morning", "afternoon", "evening", "night")],
         "sla_breaches": r["sla_breaches"],
     }
+
+
+async def get_handled_by(
+    start: Optional[str] = None, end: Optional[str] = None, vertical: Optional[str] = None,
+    zone: Optional[str] = None,
+) -> dict:
+    """Bot vs human-agent handling split, with the sentiment outcome of each.
+
+    "Handled by bot" = conversation closed without ever getting an agent_name;
+    "handled by agent" = escalated to a human. Percentages are within each
+    handler so the two columns are directly comparable.
+    """
+    rows = await bq.query_handled_by(start, end, vertical, zone)
+    total = sum(r["handled"] for r in rows) or 0
+    out = []
+    for r in rows:
+        n = r["handled"]
+        pct = lambda x: round(x / n * 100, 1) if n else 0.0
+        out.append({
+            **r,
+            "share_pct": round(n / total * 100, 1) if total else 0.0,
+            "positive_pct": pct(r["positive"]),
+            "neutral_pct": pct(r["neutral"]),
+            "negative_pct": pct(r["negative"]),
+            "resolved_pct": pct(r["resolved"]),
+        })
+    return {"total": total, "handlers": out}
 
 
 async def get_negative_customers(

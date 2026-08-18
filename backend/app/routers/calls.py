@@ -37,6 +37,7 @@ async def _process(transcript: str) -> dict:
         "sentiment_confidence": analysis["sentiment_confidence"],
         "entities": analysis["entities"],
         "summary": analysis["summary"],
+        "reason": analysis["reason"],
         "enriched_orders": enriched_orders,
         "analysed_at": datetime.now(timezone.utc).isoformat(),
     }

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { ChevronLeft, ChevronRight, FileText, FilterX } from "lucide-react"
 import {
   CallRecord,
@@ -12,16 +12,18 @@ import {
 } from "@/lib/clarity-data"
 import { Panel } from "./panel"
 import { CallDetailModal } from "./call-detail-modal"
-import { ColumnFilter, useColumnFilters, type ColumnDef } from "./column-filter"
+import { ColumnFilter, distinctValues, type ColumnDef, type ColumnFilterState } from "./column-filter"
 import { useT, useTV } from "@/lib/i18n"
 
 const PAGE_SIZE = 10
 
 // Categorical columns get an Excel-style dropdown filter. Module-level so the
-// reference is stable across renders (required by useColumnFilters).
-const CALL_FILTER_COLUMNS: ColumnDef<CallRecord>[] = [
+// reference is stable across renders, and exported so the page can apply the
+// same filters to its charts.
+export const CALL_FILTER_COLUMNS: ColumnDef<CallRecord>[] = [
   { id: "agent", accessor: (c) => c.agent },
   { id: "city", accessor: (c) => c.city },
+  { id: "reason", accessor: (c) => c.reason },
   { id: "category", accessor: (c) => c.category },
   { id: "sentiment", accessor: (c) => c.sentiment },
   { id: "helpfulness", accessor: (c) => c.agentHelpfulness },
@@ -31,20 +33,32 @@ const CALL_FILTER_COLUMNS: ColumnDef<CallRecord>[] = [
 export function CallTable({
   calls,
   activeLabel,
+  filters,
+  onFiltersChange,
+  filterSource,
 }: {
+  /** Rows to show — already filtered by the page (column filters included). */
   calls: CallRecord[]
   activeLabel?: string | null
+  /** Column-filter selection, owned by the page so every card shares it. */
+  filters: ColumnFilterState
+  onFiltersChange: (next: ColumnFilterState) => void
+  /** Rows the dropdowns list values from — the unfiltered window, so picking a
+   *  value never removes the other options from its own menu. */
+  filterSource: CallRecord[]
 }) {
   const t = useT()
   const tv = useTV()
   const [page, setPage] = useState(0)
   const [active, setActive] = useState<CallRecord | null>(null)
 
-  const { filteredRows, distinct, selected, setSelected, clearAll, anyActive } = useColumnFilters(
-    calls,
-    CALL_FILTER_COLUMNS,
-  )
-  const filtered = filteredRows
+  const distinct = useMemo(() => distinctValues(filterSource, CALL_FILTER_COLUMNS), [filterSource])
+  const selected = filters
+  const setSelected = (id: string, next: Set<string> | null) =>
+    onFiltersChange({ ...filters, [id]: next })
+  const clearAll = () => onFiltersChange({})
+  const anyActive = CALL_FILTER_COLUMNS.some((c) => filters[c.id] != null)
+  const filtered = calls
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
 
   // Reset to first page whenever the filtered result set changes
@@ -84,7 +98,7 @@ export function CallTable({
         }
       >
         <div className="-mx-2 overflow-x-auto">
-          <table className="w-full min-w-[1080px] text-sm">
+          <table className="w-full min-w-[1260px] text-sm">
             <thead>
               <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                 <th className="px-3 py-2 font-semibold">{t("col.callId")}</th>
@@ -97,6 +111,10 @@ export function CallTable({
                 <th className="whitespace-nowrap px-3 py-2 font-semibold">
                   {t("col.city")}
                   <ColumnFilter label={t("col.city")} values={distinct.city} selected={selected.city ?? null} onChange={(n) => setSelected("city", n)} />
+                </th>
+                <th className="whitespace-nowrap px-3 py-2 font-semibold">
+                  {t("col.reason")}
+                  <ColumnFilter label={t("col.reason")} values={distinct.reason} selected={selected.reason ?? null} onChange={(n) => setSelected("reason", n)} />
                 </th>
                 <th className="whitespace-nowrap px-3 py-2 font-semibold">
                   {t("col.category")}
@@ -135,6 +153,9 @@ export function CallTable({
                   </td>
                   <td className="px-3 py-2.5 text-foreground">{c.agent}</td>
                   <td className="px-3 py-2.5 text-muted-foreground">{c.city}</td>
+                  <td className="max-w-[220px] px-3 py-2.5 text-foreground" title={tv(c.reason)}>
+                    <span className="line-clamp-2">{tv(c.reason)}</span>
+                  </td>
                   <td className="px-3 py-2.5">
                     <Pill color={CATEGORY_COLORS[c.category]}>{tv(c.category)}</Pill>
                   </td>

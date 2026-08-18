@@ -112,7 +112,24 @@ def _connect() -> sqlite3.Connection:
     conn.create_function("day_name", 1, _day_name, deterministic=True)
     conn.create_function("split_first", 2, _split_first, deterministic=True)
     conn.create_aggregate("mode_value", 1, _ModeValue)
+    _migrate(conn)
     return conn
+
+
+# Columns added after the generator script shipped. Idempotent: SQLite raises
+# "duplicate column name" on a re-run, which is the no-op we want.
+_MIGRATIONS = (
+    "ALTER TABLE call_analysis ADD COLUMN call_reason TEXT",
+)
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    for stmt in _MIGRATIONS:
+        try:
+            conn.execute(stmt)
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass
 
 
 def get_conn() -> sqlite3.Connection:

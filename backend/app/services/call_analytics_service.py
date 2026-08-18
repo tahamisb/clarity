@@ -9,6 +9,7 @@ import re
 import time
 
 from app.services import local_db as db
+from app.services.call_service import derive_reason
 from app.services.local_db import countif, safe_divide
 from app.services.verticals import merchant_cte, vertical_case
 
@@ -208,12 +209,30 @@ def _summary_sync() -> dict:
         FROM call_analysis WHERE analysed_at IS NOT NULL GROUP BY week ORDER BY week
     """)
 
+    reason_rows = db.query(f"""
+        SELECT COALESCE(NULLIF(TRIM(call_reason), ''), summary) AS raw_reason,
+          primary_intent, COUNT(*) AS volume,
+          {countif("sentiment = 'negative'")} AS negative_count
+        FROM call_analysis
+        GROUP BY raw_reason, primary_intent
+    """)
+    reasons: dict[str, dict] = {}
+    for r in reason_rows:
+        label = derive_reason("", r["raw_reason"] or "", r["primary_intent"] or "general_inquiry")
+        agg = reasons.setdefault(label, {"reason": label, "volume": 0, "negative_count": 0})
+        agg["volume"] += int(r["volume"])
+        agg["negative_count"] += int(r["negative_count"])
+    reason_dist = sorted(reasons.values(), key=lambda r: -r["volume"])[:15]
+    for r in reason_dist:
+        r["negative_pct"] = round(r["negative_count"] / r["volume"] * 100, 1) if r["volume"] else 0.0
+
     top_by_freq = db.query(_topics_sql("volume DESC"))
     top_by_neg = db.query(_topics_sql("negative_pct DESC, volume DESC"))
 
     return {
         "overview": overview,
         "intent_distribution": intent_dist,
+        "reason_distribution": reason_dist,
         "sentiment_trend": trend,
         "top_topics_by_frequency": top_by_freq,
         "top_topics_by_negative_sentiment": top_by_neg,
@@ -324,7 +343,7 @@ def _get_calls_sync(page: int, page_size: int) -> dict:
         SELECT
           ca.call_id, ca.transcript, ca.intents, ca.primary_intent, ca.sentiment,
           ca.sentiment_confidence, ca.order_ids, ca.restaurant_names, ca.areas,
-          ca.product_names, ca.qar_amounts, ca.summary,
+          ca.product_names, ca.qar_amounts, ca.summary, ca.call_reason,
           {_VERTICAL} AS vertical,
           ca.analysed_at
         FROM call_analysis ca {_CALL_MV_JOIN}
@@ -342,6 +361,12 @@ def _get_calls_sync(page: int, page_size: int) -> dict:
             except (json.JSONDecodeError, TypeError):
                 item[field] = []
         transcript = item.get("transcript") or ""
+        # Rows analysed before call_reason existed get one derived from the
+        # summary, so the UI never falls back to a generic "General" label.
+        item["call_reason"] = derive_reason(
+            item.get("call_reason") or "", item.get("summary") or "",
+            item.get("primary_intent") or "general_inquiry",
+        )
         item["agent_name"] = _extract_agent_name(transcript)
         item["agent_helpfulness"] = _analyze_agent_helpfulness(transcript)
         item["customer_behavior"] = _analyze_customer_behavior(transcript)
