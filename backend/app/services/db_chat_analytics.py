@@ -66,15 +66,33 @@ async def get_messages_stats() -> dict:
 
 
 def _contact_rate_sync(start: Optional[str], end: Optional[str]) -> dict:
-    # ponytail: orders go back to 2025 but chat coverage only starts 2026-01-01 —
-    # clamp the denominator to chat coverage so "All" isn't diluted.
-    start = start or "2026-01-01"
+    # Orders go back further than chat coverage does, so an unclamped "All"
+    # divides contacts by a denominator that never could have produced any.
+    # Derived from the data rather than hard-coded to 2026-01-01: against a
+    # live warehouse on a rolling window, that constant silently drifts wrong.
+    if not start:
+        first_chat = db.query_one("SELECT MIN(created_at) AS first FROM chat_history")
+        start = str(first_chat["first"])[:10] if first_chat and first_chat["first"] else None
     # Order-level: share of orders placed in the window that have at least one
     # support chat linked via chat_history.order_id AND opened after the order
     # was placed. Chats without an order_id (most bot/general chats) can't be
     # attributed to an order and don't count. Orders with a NULL placement time
     # fall back to midnight. chat_history.created_at is UTC while
     # order_placement_time is Qatar local (UTC+3, no DST) — hence the shift.
+    # Built conditionally rather than as `:start IS NULL OR col >= :start`.
+    # That guard forces the parameter's type to text, and the column is a real
+    # date now, so Postgres finds no `date >= text` operator. Omitting the
+    # clause entirely also lets the planner use the index on the date column,
+    # which the null-guard form prevented.
+    clauses, params = [], {}
+    if start:
+        clauses.append("o.order_placement_date >= :start")
+        params["start"] = start
+    if end:
+        clauses.append("o.order_placement_date <= :end")
+        params["end"] = end
+    where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+
     row = db.query_one(f"""
         WITH chat_orders AS (
             SELECT order_id, {shift_hours("MAX(created_at)", 3)} AS last_chat_at_qatar
@@ -91,13 +109,8 @@ def _contact_rate_sync(start: Optional[str], end: Optional[str]) -> dict:
             )} AS orders_with_chat_after
         FROM vendor_kpi o
         LEFT JOIN chat_orders co ON o.id = co.order_id
-        -- CAST(... AS TEXT), not a bare `:start IS NULL`: a parameter used
-        -- only in a null test gives Postgres nothing to infer a type from
-        -- ("could not determine data type of parameter $1"). SQLite is happy
-        -- either way, so the cast is the portable spelling.
-        WHERE (CAST(:start AS TEXT) IS NULL OR o.order_placement_date >= :start)
-          AND (CAST(:end AS TEXT) IS NULL OR o.order_placement_date <= :end)
-    """, {"start": start, "end": end})
+        {where}
+    """, params)
     total, contacted = row["total_orders"], row["orders_with_chat_after"]
     return {
         "total_orders": total,

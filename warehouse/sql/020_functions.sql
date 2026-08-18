@@ -173,6 +173,21 @@ BEGIN
 END
 $$ LANGUAGE plpgsql IMMUTABLE;
 
+-- Overloads for the native types the compat views now expose. Before those
+-- views stopped rendering everything to text, a `date` or `timestamptz`
+-- argument here simply had no candidate function and the query failed.
+CREATE FUNCTION public.strftime(fmt text, value date)
+RETURNS text AS $$ SELECT public.strftime(fmt, value::timestamp::text) $$
+LANGUAGE sql IMMUTABLE PARALLEL SAFE;
+
+CREATE FUNCTION public.strftime(fmt text, value timestamptz)
+RETURNS text AS $$ SELECT public.strftime(fmt, to_char(value AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')) $$
+LANGUAGE sql STABLE PARALLEL SAFE;
+
+CREATE FUNCTION public.datetime(value timestamptz)
+RETURNS text AS $$ SELECT to_char(value AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS') $$
+LANGUAGE sql STABLE PARALLEL SAFE;
+
 -- json_each(doc) --------------------------------------------------------------
 -- SQLite's table-valued JSON1 function, used to explode the JSON arrays on
 -- call_analysis in a FROM clause (`FROM call_analysis ca, json_each(ca.areas)`).

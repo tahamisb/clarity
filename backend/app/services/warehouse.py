@@ -140,10 +140,10 @@ def sql_now() -> str:
     if clock.FROZEN:
         return f"'{clock.now_sql()}'"
     if BACKEND == "postgres":
-        # Rendered to text, not left as `now()`: callers COALESCE it with
-        # timestamp columns, which the compat views expose as TEXT, and
-        # COALESCE(text, timestamptz) is a type error rather than a coercion.
-        return "to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')"
+        # `now()` itself, because the compat views hand back real timestamptz
+        # columns — callers COALESCE it with those, and a text rendering would
+        # be the type error here rather than the fix.
+        return "now()"
     return "datetime('now')"
 
 

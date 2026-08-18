@@ -15,7 +15,22 @@
 -- this schema is also where its column mapping goes — which is why the seam is
 -- worth having even though today's views are nearly pass-through.
 --
--- Timestamps render in UTC, matching how the source data was stored.
+-- **Timestamps and dates are handed back as their real types**, not rendered to
+-- text here. That is a correctness-neutral change — the driver formats a
+-- `date` as 'YYYY-MM-DD' and a `timestamptz` as 'YYYY-MM-DD HH:MM:SS' on the
+-- way out, so the JSON on the wire is byte-identical — and a large performance
+-- one. Wrapping a column in `to_char()` makes every predicate against it
+-- unindexable, and because `to_char` is STABLE rather than IMMUTABLE it cannot
+-- even be recovered with an expression index.
+--
+-- Measured on 1.4M orders: `WHERE order_placement_date >= '2026-08-13'` took
+-- 1341 ms through the to_char view and 1.4 ms against the real column. Every
+-- date-filtered dashboard query on the box timed out. It was invisible on the
+-- 60k snapshot, which is small enough that a full scan is instant.
+--
+-- `order_placement_time` stays TEXT: the cancellation views take
+-- `substr(order_placement_time, 1, 2)` to get the hour, and it is never used
+-- in a range predicate, so there is nothing to gain and a query to break.
 
 SET search_path = compat, warehouse, public;
 
@@ -25,7 +40,7 @@ SELECT
     vendor_id,
     customer_id,
     order_status,
-    to_char(order_placement_date, 'YYYY-MM-DD')      AS order_placement_date,
+    order_placement_date,
     to_char(order_placement_time, 'HH24:MI:SS')      AS order_placement_time,
     total_order_value::double precision              AS total_order_value,
     order_sub_total_value::double precision          AS order_sub_total_value,
@@ -77,8 +92,8 @@ SELECT
     device_id,
     locale,
     messages::text                                              AS messages,
-    to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS') AS created_at,
-    to_char(closed_at  AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS') AS closed_at,
+    created_at,
+    closed_at,
     closed_by,
     is_phone_call::int                                          AS is_phone_call
 FROM warehouse.chat_history;
@@ -91,9 +106,9 @@ SELECT
     source_channel,
     merchant_name,
     zone,
-    to_char(created_at  AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS') AS created_at,
-    to_char(ingested_at AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS') AS ingested_at,
-    to_char(closed_at   AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS') AS closed_at,
+    created_at,
+    ingested_at,
+    closed_at,
     agent_name
 FROM warehouse.messages;
 
@@ -107,7 +122,7 @@ SELECT
     intent_confidence,
     negative_trigger,
     model_version,
-    to_char(classified_at AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS') AS classified_at
+    classified_at
 FROM warehouse.classifications;
 
 CREATE OR REPLACE VIEW compat.labels AS
@@ -116,14 +131,14 @@ SELECT
     true_sentiment,
     true_intent,
     labelled_by,
-    to_char(labelled_at AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS') AS labelled_at
+    labelled_at
 FROM warehouse.labels;
 
 CREATE OR REPLACE VIEW compat.skipped_chats AS
 SELECT
     chat_id,
     reason,
-    to_char(skipped_at AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS') AS skipped_at
+    skipped_at
 FROM warehouse.skipped_chats;
 
 CREATE OR REPLACE VIEW compat.call_analysis AS
@@ -140,7 +155,7 @@ SELECT
     product_names::text      AS product_names,
     qar_amounts::text        AS qar_amounts,
     summary,
-    to_char(analysed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS') AS analysed_at
+    analysed_at
 FROM warehouse.call_analysis;
 
 CREATE OR REPLACE VIEW compat.cancellation_predictions AS
@@ -156,5 +171,5 @@ SELECT
     recommended_action,
     restaurant_name,
     zone_name,
-    to_char(predicted_at AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS') AS predicted_at
+    predicted_at
 FROM warehouse.cancellation_predictions;
